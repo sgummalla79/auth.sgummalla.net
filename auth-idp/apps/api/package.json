@@ -8,7 +8,11 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "db:generate": "node --env-file=.env node_modules/drizzle-kit/bin.cjs generate",
+    "db:migrate":  "node --env-file=.env node_modules/drizzle-kit/bin.cjs migrate",
+    "db:studio":   "node --env-file=.env node_modules/drizzle-kit/bin.cjs studio",
+    "db:push":     "node --env-file=.env node_modules/drizzle-kit/bin.cjs push"
   },
   "dependencies": {
     "@fastify/cookie": "^9.3.1",
