@@ -20,6 +20,11 @@ import type { ISessionStore } from '../../modules/users/application/ports/ISessi
 import type { RegisterUserUseCase } from '../../modules/users/application/use-cases/RegisterUser.js'
 import type { LoginUserUseCase } from '../../modules/users/application/use-cases/LoginUser.js'
 import type { GetUserProfileUseCase, UpdateUserProfileUseCase } from '../../modules/users/application/use-cases/UserProfile.js'
+import type { IApplicationRepository } from '../../modules/applications/application/ports/IApplicationRepository.js'
+import type { ISlugGenerator } from '../../modules/applications/application/ports/ISlugGenerator.js'
+import type { ICredentialGenerator } from '../../modules/applications/application/ports/ICredentialGenerator.js'
+import type { RegisterApplicationUseCase } from '../../modules/applications/application/use-cases/RegisterApplication.js'
+import type { GetApplicationUseCase, ListApplicationsUseCase, UpdateApplicationUseCase } from '../../modules/applications/application/use-cases/ApplicationQueries.js'
 
 export interface Cradle {
   db: DrizzleClient
@@ -34,6 +39,7 @@ export interface Cradle {
   generateSigningKeyUseCase: GenerateSigningKeyUseCase
   rotateSigningKeyUseCase: RotateSigningKeyUseCase
   getJwksUseCase: GetJwksUseCase
+  //User Module
   userRepository: IUserRepository
   hashService: IHashService
   sessionStore: ISessionStore
@@ -41,6 +47,14 @@ export interface Cradle {
   loginUserUseCase: LoginUserUseCase
   getUserProfileUseCase: GetUserProfileUseCase
   updateUserProfileUseCase: UpdateUserProfileUseCase
+  // Applications module
+  applicationRepository: IApplicationRepository
+  slugGenerator: ISlugGenerator
+  credentialGenerator: ICredentialGenerator
+  registerApplicationUseCase: RegisterApplicationUseCase
+  getApplicationUseCase: GetApplicationUseCase
+  listApplicationsUseCase: ListApplicationsUseCase
+  updateApplicationUseCase: UpdateApplicationUseCase
 }
 
 export type AppContainer = AwilixContainer<Cradle>

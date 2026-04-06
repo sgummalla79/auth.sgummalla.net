@@ -19,6 +19,7 @@ Built with Node.js, TypeScript, Fastify, Supabase (Postgres), Redis Cloud, and M
 - [Database Schema](#database-schema)
 - [Schema Change Workflow](#schema-change-workflow)
 - [Key Management](#key-management)
+- [Application Registry](#application-registry)
 - [Project Structure](#project-structure)
 - [Module Status](#module-status)
 - [Tech Stack](#tech-stack)
@@ -122,7 +123,7 @@ PORT=3000
 HOST=0.0.0.0
 LOG_LEVEL=debug
 
-# Supabase — port 6543 for queries, port 5432 for migrations
+# Supabase — port 6543 for queries, port 5432 for schema inspection
 DATABASE_URL=postgresql://postgres.YOURREF:PASSWORD@aws-0-us-east-1.pooler.supabase.com:6543/postgres
 DATABASE_URL_DIRECT=postgresql://postgres.YOURREF:PASSWORD@aws-0-us-east-1.pooler.supabase.com:5432/postgres
 
@@ -153,7 +154,7 @@ Run **three times** — one value per secret:
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-> No quotes around values. No spaces. Never commit `.env`.
+> No quotes. No spaces around `=`. Never commit `.env`.
 
 ---
 
@@ -166,118 +167,133 @@ pnpm start       # run built output
 pnpm test        # run all tests
 ```
 
-On startup the server auto-generates an RSA-2048 signing key if none exists:
-
-```
-No active signing key — generating initial RS256 key
-Initial signing key generated  kid=key_a1b2c3d4
-```
+On startup the server auto-generates an RSA-2048 signing key if none exists.
 
 ---
 
 ## Testing with cURL
 
-### Health check
+### Health & infrastructure
 
 ```bash
+# All three data stores
 curl http://localhost:3000/health | jq
-```
 
-### JWKS — public signing key
+# Readiness probe
+curl http://localhost:3000/ready
 
-```bash
+# JWKS — public signing key for SPs
 curl http://localhost:3000/.well-known/jwks.json | jq
 ```
 
-### Register a user
+### User auth flow
 
 ```bash
+# Register
 curl -s -X POST http://localhost:3000/auth/register \
   -H "Content-Type: application/json" \
   -d '{"email":"alice@example.com","password":"Password1","givenName":"Alice","familyName":"Smith"}' | jq
-```
 
-Expected `201`:
-```json
-{
-  "id": "uuid",
-  "email": "alice@example.com",
-  "status": "pending_verification",
-  "message": "Account created. Please verify your email."
-}
-```
-
-### Login
-
-```bash
+# Login — save the sessionToken
 curl -s -X POST http://localhost:3000/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"alice@example.com","password":"Password1"}' | jq
-```
 
-Expected `200`:
-```json
-{
-  "sessionToken": "abc123...",
-  "userId": "uuid",
-  "email": "alice@example.com",
-  "expiresAt": "2026-04-07T..."
-}
-```
-
-### Get profile (replace TOKEN with sessionToken from login)
-
-```bash
+# Get profile (replace TOKEN)
 curl -s http://localhost:3000/auth/me \
   -H "Authorization: Bearer TOKEN" | jq
-```
 
-### Update profile
-
-```bash
+# Update profile
 curl -s -X PATCH http://localhost:3000/auth/me \
   -H "Authorization: Bearer TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"displayName":"Alice S.","locale":"en-US"}' | jq
-```
 
-### Logout
-
-```bash
+# Logout
 curl -s -X POST http://localhost:3000/auth/logout \
   -H "Authorization: Bearer TOKEN" | jq
 ```
 
-### Weak password — expect 422
+### Application registry (replace ADMIN_KEY)
 
 ```bash
-curl -s -X POST http://localhost:3000/auth/register \
+# Register a SAML app
+curl -s -X POST http://localhost:3000/api/v1/admin/applications \
+  -H "Authorization: Bearer ADMIN_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"email":"bob@example.com","password":"weak"}' | jq
+  -d '{
+    "protocol": "saml",
+    "name": "Salesforce CRM",
+    "saml": {
+      "entityId": "https://salesforce.example.com/saml/metadata",
+      "acsUrl": "https://salesforce.example.com/saml/acs"
+    }
+  }' | jq
+
+# Register an OIDC app — save clientSecret from response
+curl -s -X POST http://localhost:3000/api/v1/admin/applications \
+  -H "Authorization: Bearer ADMIN_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "protocol": "oidc",
+    "name": "Internal Portal",
+    "oidc": {
+      "redirectUris": ["https://portal.example.com/callback"],
+      "scopes": ["openid", "profile", "email"]
+    }
+  }' | jq
+
+# Register a JWT app
+curl -s -X POST http://localhost:3000/api/v1/admin/applications \
+  -H "Authorization: Bearer ADMIN_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "protocol": "jwt",
+    "name": "Data Pipeline API",
+    "jwt": { "audience": ["https://api.example.com"], "tokenLifetime": 3600 }
+  }' | jq
+
+# List all apps
+curl -s http://localhost:3000/api/v1/admin/applications \
+  -H "Authorization: Bearer ADMIN_KEY" | jq
+
+# Get one app (replace APP_ID)
+curl -s http://localhost:3000/api/v1/admin/applications/APP_ID \
+  -H "Authorization: Bearer ADMIN_KEY" | jq
+
+# Update app status
+curl -s -X PATCH http://localhost:3000/api/v1/admin/applications/APP_ID \
+  -H "Authorization: Bearer ADMIN_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"status": "inactive"}' | jq
 ```
 
-### Wrong password — expect 401
+### Key management
 
 ```bash
-curl -s -X POST http://localhost:3000/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"alice@example.com","password":"WrongPassword1"}' | jq
-```
-
-### Admin — rotate signing key
-
-```bash
+# Rotate signing key
 curl -s -X POST http://localhost:3000/api/v1/admin/keys/rotate \
-  -H "Authorization: Bearer YOUR_ADMIN_API_KEY" \
+  -H "Authorization: Bearer ADMIN_KEY" \
   -H "Content-Type: application/json" \
   -d '{}' | jq
 ```
 
-### Unauthorized admin — expect 401
+### Error cases
 
 ```bash
-curl -s -X POST http://localhost:3000/api/v1/admin/keys/rotate \
-  -H "Authorization: Bearer wrongkey" | jq
+# Weak password — 422
+curl -s -X POST http://localhost:3000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"bob@example.com","password":"weak"}' | jq
+
+# Duplicate app name — 409
+curl -s -X POST http://localhost:3000/api/v1/admin/applications \
+  -H "Authorization: Bearer ADMIN_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"protocol":"saml","name":"Salesforce CRM","saml":{"entityId":"https://other.com","acsUrl":"https://other.com/acs"}}' | jq
+
+# Missing auth — 401
+curl -s http://localhost:3000/auth/me | jq
 ```
 
 ---
@@ -302,9 +318,9 @@ curl -s -X POST http://localhost:3000/api/v1/admin/keys/rotate \
 
 - **Private keys encrypted at rest** — AES-256-GCM, key derived from `KEY_ENCRYPTION_SECRET` via scrypt
 - **Passwords hashed with Argon2id** — 64MB memory, 3 iterations, 4 parallelism (OWASP 2024)
-- **Client secrets hashed** — Argon2id, plaintext returned once at registration only
+- **OIDC client secrets hashed** — Argon2id, plaintext shown once at registration, never stored
 - **Account lockout** — 5 failed attempts locks for 15 minutes
-- **SLO tracking** — `sso_sessions.participating_app_ids` for Single Logout
+- **SLO tracking** — `sso_sessions.participating_app_ids` for Single Logout propagation
 - **Key rotation lifecycle** — `active → rotating → retired → revoked`
 - **`updated_at` auto-trigger** — Postgres trigger on all mutable tables
 - **RLS enabled** — Deny-all for `anon` and `authenticated` roles
@@ -316,8 +332,8 @@ curl -s -X POST http://localhost:3000/api/v1/admin/keys/rotate \
 > Apply via Supabase SQL Editor — not `drizzle-kit migrate` (Drizzle 0.30 array default bug).
 
 ```bash
-pnpm db:generate          # generate SQL diff
-# fix array defaults manually (see table below)
+pnpm db:generate   # generate SQL diff
+# fix array defaults manually if needed (see table below)
 # paste into Supabase SQL Editor → Run
 rm drizzle/migrations/*.sql && rm -rf drizzle/migrations/meta
 ```
@@ -336,9 +352,9 @@ rm drizzle/migrations/*.sql && rm -rf drizzle/migrations/meta
 
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
-| `GET` | `/.well-known/jwks.json` | Public | Get public signing keys |
-| `POST` | `/api/v1/admin/keys/generate` | Admin API key | Generate initial key |
-| `POST` | `/api/v1/admin/keys/rotate` | Admin API key | Rotate to new key |
+| `GET` | `/.well-known/jwks.json` | Public | Public signing keys for SPs |
+| `POST` | `/api/v1/admin/keys/generate` | Admin | Generate initial key |
+| `POST` | `/api/v1/admin/keys/rotate` | Admin | Rotate to new key |
 
 ### Key lifecycle
 
@@ -346,45 +362,65 @@ rm drizzle/migrations/*.sql && rm -rf drizzle/migrations/meta
 generated → active → (rotate) → retired → [stays in JWKS until tokens expire]
 ```
 
-### Rotation recommendations
+Rotate every 60–80 days. Retired keys stay in JWKS — never delete while tokens signed with them exist.
 
-- Rotate every 60–80 days (default expiry is 90 days)
-- Retired keys stay in JWKS — never delete while tokens signed with them exist
+Supported algorithms: `RS256` (default), `RS384`, `RS512`, `ES256`, `ES384`, `ES512`
 
-### Supported algorithms
+---
 
-`RS256` (default), `RS384`, `RS512`, `ES256`, `ES384`, `ES512`
+## Application Registry
+
+### Endpoints
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| `POST` | `/api/v1/admin/applications` | Admin | Register SAML / OIDC / JWT app |
+| `GET` | `/api/v1/admin/applications` | Admin | List all apps |
+| `GET` | `/api/v1/admin/applications/:id` | Admin | Get app with protocol config |
+| `PATCH` | `/api/v1/admin/applications/:id` | Admin | Update name, logo, status |
+
+### Protocol-specific registration
+
+**SAML** — provide `entityId`, `acsUrl`, optional `sloUrl` and `attributeMappings`. Response includes `idpMetadataUrl` to give to the SP.
+
+**OIDC** — provide `redirectUris` (required). Response includes `clientId` and `clientSecret`. **Store `clientSecret` immediately — it is never shown again.**
+
+**JWT** — provide `publicKey` (PEM) or `certThumbprint` for mTLS, plus `audience`. No secret needed — authentication is via signed client assertions.
+
+### Slug generation
+
+App names are converted to URL-safe slugs automatically:
+- `"Salesforce CRM"` → `"salesforce-crm"`
+- `"My App v2.0!"` → `"my-app-v20"`
+
+Slugs must be unique — registering a duplicate name returns `409 Conflict`.
 
 ---
 
 ## Project Structure
 
 ```
-auth-idp/
-├── apps/api/src/
-│   ├── shared/
-│   │   ├── result/          # Result<T,E> — isOk()/isErr() as methods
-│   │   ├── errors/          # AppError hierarchy
-│   │   ├── config/          # Zod env schema — all vars validated at startup
-│   │   ├── logger/          # Pino — reads process.env directly
-│   │   └── container/       # Awilix PROXY — Cradle type, buildContainer()
-│   ├── infrastructure/
-│   │   ├── database/        # Drizzle + postgres (prepare:false for Supavisor)
-│   │   ├── cache/           # ioredis + exponential backoff retry
-│   │   └── mongo/           # MongoDB Atlas + TTL indexes
-│   ├── database/
-│   │   └── index.ts         # Single re-export for all Drizzle schemas
-│   └── modules/
-│       ├── keys/            # M03 — RSA generation, AES encryption, JWKS, rotation
-│       │   ├── domain/SigningKey.ts
-│       │   ├── application/{ports,use-cases}
-│       │   ├── infrastructure/{NodeCrypto,Aes,Supabase,Redis}
-│       │   └── interface/{KeyRoutes,KeyDTOs}
-│       └── users/           # M04 — Registration, login, profile, sessions
-│           ├── domain/{User,UserProfile}
-│           ├── application/{ports,use-cases}
-│           ├── infrastructure/{Argon2,RedisSession,SupabaseUser}
-│           └── interface/{UserRoutes,AuthMiddleware}
+auth-idp/apps/api/src/
+├── shared/
+│   ├── result/          # Result<T,E> — isOk()/isErr() as methods
+│   ├── errors/          # AppError hierarchy (ValidationError, ConflictError, etc.)
+│   ├── config/          # Zod env schema — all vars validated at startup
+│   ├── logger/          # Pino — reads process.env directly
+│   └── container/       # Awilix PROXY — Cradle type, buildContainer()
+├── infrastructure/
+│   ├── database/        # Drizzle + postgres (prepare:false for Supavisor)
+│   ├── cache/           # ioredis + exponential backoff
+│   └── mongo/           # MongoDB Atlas + TTL indexes
+├── database/
+│   └── index.ts         # Single re-export for all Drizzle schemas
+└── modules/
+    ├── keys/            # M03 — RSA generation, AES encryption, JWKS, rotation
+    ├── users/           # M04 — Registration, login, Argon2id, sessions, profiles
+    └── applications/    # M05 — App registry, SAML/OIDC/JWT config, slug + credentials
+        ├── domain/      # Application, SamlConfig, OidcClient, JwtConfig
+        ├── application/ # RegisterApplication, GetApplication, List, Update
+        ├── infrastructure/ # SupabaseRepo, SlugGenerator, CredentialGenerator
+        └── interface/   # ApplicationRoutes
 ```
 
 ---
@@ -397,8 +433,8 @@ auth-idp/
 | M02 | Database schema — 9 tables, indexes, RLS, triggers | ✅ Complete |
 | M03 | Key management — RSA/EC generation, AES-256-GCM, JWKS, rotation | ✅ Complete |
 | M04 | User management — registration, login, Argon2id, profiles, sessions | ✅ Complete |
-| M05 | Application registry — register SAML / OIDC / JWT apps | 🔜 Next |
-| M06 | OIDC / OAuth 2.0 — oidc-provider, all discovery endpoints | ⏳ Pending |
+| M05 | Application registry — SAML / OIDC / JWT app registration | ✅ Complete |
+| M06 | OIDC / OAuth 2.0 — oidc-provider, all discovery endpoints | 🔜 Next |
 | M07 | SAML 2.0 — IDP metadata, SSO flow, signed assertions | ⏳ Pending |
 | M08 | JWT / cert auth — client assertions RFC 7523, mTLS | ⏳ Pending |
 | M09 | MFA — TOTP, WebAuthn, backup codes | ⏳ Pending |
@@ -420,10 +456,10 @@ auth-idp/
 | Documents | MongoDB Atlas | Audit logs |
 | Validation | Zod | Env + request validation |
 | Logging | Pino + pino-pretty | Structured JSON |
-| Testing | Vitest | Unit tests (mocked ports) |
+| Testing | Vitest | Unit tests with mocked ports |
 | Crypto | Node.js `crypto` | RSA/EC key generation |
 | Key encryption | AES-256-GCM + scrypt | Private keys at rest |
-| Password hashing | Argon2id | User passwords |
+| Password hashing | Argon2id | User passwords + OIDC secrets |
 | JWK conversion | jose | JWKS endpoint |
 | OIDC / OAuth | oidc-provider | M06 |
 | SAML | samlify | M07 |
@@ -434,11 +470,12 @@ auth-idp/
 
 | Error | Fix |
 |---|---|
-| `❌ Invalid environment variables` | All vars required — check `ADMIN_API_KEY` is set |
+| `❌ Invalid environment variables` | All vars required — check `ADMIN_API_KEY` is set, no quotes |
 | `401` on admin routes | Exact value from `.env` — no quotes, no spaces around `=` |
 | `401` on `/auth/me` | Pass `Authorization: Bearer TOKEN` from login response |
-| `409` on register | Email already exists — use different email |
-| `422` on register | Password needs 8+ chars, uppercase, lowercase, number |
+| `409` on register | Email or app name already exists |
+| `422` on register | Password: 8+ chars, uppercase, lowercase, number |
+| `422` on app register | Check `entityId`/`acsUrl` are valid URLs for SAML; `redirectUris` non-empty array for OIDC |
 | `409` on key generate | Use `/rotate` — key already exists from bootstrap |
 | `isOk is not a function` | Stop server, `rm -rf node_modules/.cache`, restart |
 | Drizzle array default error | Apply SQL via Supabase SQL Editor |
