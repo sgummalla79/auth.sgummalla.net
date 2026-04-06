@@ -28,6 +28,7 @@
     "jose": "^6.2.2",
     "mongodb": "^6.6.1",
     "nanoid": "^5.0.7",
+    "oidc-provider": "^9.7.1",
     "pino": "^9.1.0",
     "pino-pretty": "^11.0.0",
     "postgres": "^3.4.4",
@@ -35,6 +36,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.12.12",
+    "@types/oidc-provider": "^9.5.0",
     "drizzle-kit": "^0.21.4",
     "tsx": "^4.11.0",
     "typescript": "^5.4.5",

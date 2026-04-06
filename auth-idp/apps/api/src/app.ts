@@ -13,6 +13,7 @@ import { checkRedisHealth } from './infrastructure/cache/redis.client.js'
 import { checkMongoHealth } from './infrastructure/mongo/mongo.client.js'
 import { registerUserModule, registerUserRoutes } from './modules/users/index.js'
 import { registerApplicationModule, registerApplicationRoutes } from './modules/applications/index.js'
+import { registerOidcModule } from './modules/oidc/index.js'
 
 const logger = createLogger('app')
 
@@ -50,6 +51,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   registerKeyModule(container)
   registerUserModule(container)
   registerApplicationModule(container)
+  await registerOidcModule(app, container) 
   app.decorate('container', container)
 
   app.addHook('onRequest', async (request: FastifyRequest) => {
