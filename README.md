@@ -40,7 +40,7 @@ Domain → Application → Infrastructure → Interface
 - **Interface** — Fastify routes and request/response DTOs
 - **Shared kernel** — Result monad, typed errors, config, logger
 
-Every external system (Postgres, Redis, MongoDB) is behind an interface. Swap any adapter by changing one registration in the Awilix DI container.
+Every external system is behind an interface. Swap any adapter by changing one line in the Awilix DI container.
 
 ---
 
@@ -52,15 +52,11 @@ Every external system (Postgres, Redis, MongoDB) is behind an interface. Swap an
 node --version   # must be >= 20
 ```
 
-Install via [nvm](https://github.com/nvm-sh/nvm) (recommended):
+Install via [nvm](https://github.com/nvm-sh/nvm):
 
 ```bash
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-
-# Restart terminal, then:
-nvm install 20
-nvm use 20
-nvm alias default 20
+nvm install 20 && nvm use 20 && nvm alias default 20
 ```
 
 ### 2. Install pnpm (v9 or higher)
@@ -70,64 +66,46 @@ npm install -g pnpm
 pnpm --version   # must be >= 9
 ```
 
-### 3. Install jq (for readable curl output)
+### 3. Install jq
 
 ```bash
-# macOS
-brew install jq
-
-# Ubuntu / Debian
-sudo apt-get install jq
+brew install jq          # macOS
+sudo apt-get install jq  # Ubuntu / Debian
 ```
 
 ---
 
 ## External Services Setup
 
-Three cloud services required. All have free tiers sufficient for development.
-
 ### Supabase (Postgres)
 
-1. Go to [supabase.com](https://supabase.com) → New project
-2. Choose a region, set a strong database password
-3. Go to **Project Settings → Database → Connection string**
-4. Copy **Transaction** mode URI (port **6543**) → `DATABASE_URL`
-5. Copy **Session** mode URI (port **5432**) → `DATABASE_URL_DIRECT`
+1. [supabase.com](https://supabase.com) → New project
+2. **Project Settings → Database → Connection string**
+3. **Transaction** mode URI (port **6543**) → `DATABASE_URL`
+4. **Session** mode URI (port **5432**) → `DATABASE_URL_DIRECT`
 
 ### Redis Cloud
 
-1. Go to [redis.io/cloud](https://redis.io/cloud) → New database (free tier)
-2. Once created → **Connect** → copy the `rediss://` URL → `REDIS_URL`
+1. [redis.io/cloud](https://redis.io/cloud) → New database (free tier)
+2. **Connect** → copy `rediss://` URL → `REDIS_URL`
 
-> Must use `rediss://` (double s = TLS). Redis Cloud requires TLS.
+> Must use `rediss://` (double s = TLS).
 
 ### MongoDB Atlas
 
-1. Go to [mongodb.com/atlas](https://www.mongodb.com/atlas) → New cluster (free M0 tier)
-2. **Database Access** → Add user with password
-3. **Network Access** → Add your IP (or `0.0.0.0/0` for dev)
-4. **Connect** → Drivers → Node.js → copy URI → `MONGODB_URI`
+1. [mongodb.com/atlas](https://www.mongodb.com/atlas) → New cluster (free M0)
+2. **Database Access** → Add user
+3. **Network Access** → Add IP
+4. **Connect** → Drivers → Node.js → `MONGODB_URI`
 
 ---
 
 ## Project Setup
 
-### 1. Clone the repository
-
 ```bash
 git clone https://github.com/sgummalla79/auth.sgummalla.net.git
 cd auth.sgummalla.net/auth-idp
-```
-
-### 2. Install dependencies
-
-```bash
 pnpm install
-```
-
-### 3. Create the environment file
-
-```bash
 cp apps/api/.env.example apps/api/.env
 ```
 
@@ -135,171 +113,158 @@ cp apps/api/.env.example apps/api/.env
 
 ## Environment Configuration
 
-Open `apps/api/.env` and fill in every value:
+`apps/api/.env`:
 
 ```env
-# ── Runtime ───────────────────────────────────────────────────────────────────
+# Runtime
 NODE_ENV=development
 PORT=3000
 HOST=0.0.0.0
 LOG_LEVEL=debug
 
-# ── Supabase / Postgres ───────────────────────────────────────────────────────
-# Transaction mode — port 6543 — for all runtime queries
+# Supabase — port 6543 for queries, port 5432 for migrations
 DATABASE_URL=postgresql://postgres.YOURREF:PASSWORD@aws-0-us-east-1.pooler.supabase.com:6543/postgres
-
-# Session mode — port 5432 — used only by Drizzle Kit for schema inspection
 DATABASE_URL_DIRECT=postgresql://postgres.YOURREF:PASSWORD@aws-0-us-east-1.pooler.supabase.com:5432/postgres
 
-# ── Redis Cloud ───────────────────────────────────────────────────────────────
+# Redis Cloud — must use rediss:// (TLS)
 REDIS_URL=rediss://default:PASSWORD@redis-XXXXX.redis-cloud.com:PORT
 
-# ── MongoDB Atlas ─────────────────────────────────────────────────────────────
+# MongoDB Atlas
 MONGODB_URI=mongodb+srv://USER:PASSWORD@cluster0.XXXXX.mongodb.net/?retryWrites=true&w=majority
 MONGODB_DB_NAME=idp_audit
 
-# ── IDP Identity ──────────────────────────────────────────────────────────────
+# IDP Identity
 IDP_ISSUER=http://localhost:3000
 IDP_BASE_URL=http://localhost:3000
 
-# ── Secrets — generate each with: ────────────────────────────────────────────
-# node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+# Secrets — generate each with the command below
 KEY_ENCRYPTION_SECRET=GENERATE_THIS
 COOKIE_SECRET=GENERATE_THIS
 ADMIN_API_KEY=GENERATE_THIS
 ```
 
-### Where to find each value
-
-| Variable | Where |
-|---|---|
-| `DATABASE_URL` | Supabase → Project Settings → Database → **Transaction** (port 6543) |
-| `DATABASE_URL_DIRECT` | Same page → **Session** (port 5432) |
-| `REDIS_URL` | Redis Cloud → Database → Connect → copy `rediss://` URL |
-| `MONGODB_URI` | Atlas → Database → Connect → Drivers → Node.js |
-
 ---
 
 ## Generate Secrets
 
-Run this command **three times** — once for each secret:
+Run **three times** — one value per secret:
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-```env
-KEY_ENCRYPTION_SECRET=first_output_here
-COOKIE_SECRET=second_output_here
-ADMIN_API_KEY=third_output_here
-```
-
-> Never reuse the same value for multiple secrets. Never commit `.env` to git.
-> Do not wrap values in quotes — `--env-file` includes them literally.
+> No quotes around values. No spaces. Never commit `.env`.
 
 ---
 
 ## Running the Project
 
-### Development (with hot reload)
-
 ```bash
-pnpm dev
-
-# or from inside apps/api:
-cd apps/api && pnpm dev
+pnpm dev         # development with hot reload
+pnpm build       # production build
+pnpm start       # run built output
+pnpm test        # run all tests
 ```
 
-On startup the server automatically checks for a signing key and generates
-one if none exists. You should see in the logs:
+On startup the server auto-generates an RSA-2048 signing key if none exists:
 
 ```
 No active signing key — generating initial RS256 key
-Initial signing key generated  kid=key_a1b2c3d4e5f6g7h8
-```
-
-### Production build
-
-```bash
-pnpm build
-pnpm start
-```
-
-### Run tests
-
-```bash
-pnpm test
-```
-
-Expected output:
-```
-✓ src/__tests__/Result.test.ts            (8 tests)
-✓ src/__tests__/schema.test.ts            (14 tests)
-✓ src/__tests__/keys/AesKeyEncryptionService.test.ts     (5 tests)
-✓ src/__tests__/keys/NodeCryptoKeyGenerationService.test.ts  (4 tests)
+Initial signing key generated  kid=key_a1b2c3d4
 ```
 
 ---
 
 ## Testing with cURL
 
-### Health check — verifies all three data stores
+### Health check
 
 ```bash
 curl http://localhost:3000/health | jq
 ```
 
-Expected:
-```json
-{
-  "status": "ok",
-  "services": { "postgres": "ok", "redis": "ok", "mongodb": "ok" }
-}
-```
-
-### Readiness probe
-
-```bash
-curl http://localhost:3000/ready
-```
-
-### JWKS endpoint — public key used by all service providers
+### JWKS — public signing key
 
 ```bash
 curl http://localhost:3000/.well-known/jwks.json | jq
 ```
 
-Expected:
+### Register a user
+
+```bash
+curl -s -X POST http://localhost:3000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"alice@example.com","password":"Password1","givenName":"Alice","familyName":"Smith"}' | jq
+```
+
+Expected `201`:
 ```json
 {
-  "keys": [
-    {
-      "kty": "RSA",
-      "use": "sig",
-      "alg": "RS256",
-      "kid": "key_a1b2c3d4",
-      "n": "...",
-      "e": "AQAB"
-    }
-  ]
+  "id": "uuid",
+  "email": "alice@example.com",
+  "status": "pending_verification",
+  "message": "Account created. Please verify your email."
 }
 ```
 
-### Generate a signing key (admin)
-
-Returns `409 Conflict` if a key already exists — use rotate instead.
+### Login
 
 ```bash
-curl -s -X POST http://localhost:3000/api/v1/admin/keys/generate \
-  -H "Authorization: Bearer YOUR_ADMIN_API_KEY" \
+curl -s -X POST http://localhost:3000/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"algorithm": "RS256", "expiresInDays": 90}' | jq
+  -d '{"email":"alice@example.com","password":"Password1"}' | jq
 ```
 
-### Rotate the signing key (admin)
+Expected `200`:
+```json
+{
+  "sessionToken": "abc123...",
+  "userId": "uuid",
+  "email": "alice@example.com",
+  "expiresAt": "2026-04-07T..."
+}
+```
 
-Retires the current key and creates a new active key. The retired key stays
-in JWKS so existing tokens remain verifiable until they expire.
+### Get profile (replace TOKEN with sessionToken from login)
+
+```bash
+curl -s http://localhost:3000/auth/me \
+  -H "Authorization: Bearer TOKEN" | jq
+```
+
+### Update profile
+
+```bash
+curl -s -X PATCH http://localhost:3000/auth/me \
+  -H "Authorization: Bearer TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"displayName":"Alice S.","locale":"en-US"}' | jq
+```
+
+### Logout
+
+```bash
+curl -s -X POST http://localhost:3000/auth/logout \
+  -H "Authorization: Bearer TOKEN" | jq
+```
+
+### Weak password — expect 422
+
+```bash
+curl -s -X POST http://localhost:3000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"bob@example.com","password":"weak"}' | jq
+```
+
+### Wrong password — expect 401
+
+```bash
+curl -s -X POST http://localhost:3000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"alice@example.com","password":"WrongPassword1"}' | jq
+```
+
+### Admin — rotate signing key
 
 ```bash
 curl -s -X POST http://localhost:3000/api/v1/admin/keys/rotate \
@@ -308,43 +273,16 @@ curl -s -X POST http://localhost:3000/api/v1/admin/keys/rotate \
   -d '{}' | jq
 ```
 
-Expected:
-```json
-{
-  "kid": "key_newkidhere",
-  "algorithm": "RS256",
-  "status": "active",
-  "message": "Key rotated. Previous key is now retired."
-}
-```
-
-### Unauthorized access — verify auth is enforced
+### Unauthorized admin — expect 401
 
 ```bash
 curl -s -X POST http://localhost:3000/api/v1/admin/keys/rotate \
   -H "Authorization: Bearer wrongkey" | jq
 ```
 
-Expected: `401 Unauthorized`
-
-### Rate limiting
-
-```bash
-for i in {1..110}; do curl -s http://localhost:3000/ready; done | tail -3 | jq
-```
-
-### Security headers
-
-```bash
-curl -I http://localhost:3000/health
-```
-
 ---
 
 ## Database Schema
-
-All schema managed via **Drizzle ORM**. Each table lives in its module's
-`infrastructure/` folder. Single import point: `src/database/index.ts`.
 
 ### Tables
 
@@ -362,83 +300,60 @@ All schema managed via **Drizzle ORM**. Each table lives in its module's
 
 ### Key design decisions
 
-- **Private keys encrypted at rest** — AES-256-GCM using `KEY_ENCRYPTION_SECRET`. IV stored separately in `encryption_iv`.
-- **Client secrets hashed** — Argon2id. Plaintext returned once at registration only.
-- **Account lockout** — `users.failed_login_attempts` + `users.locked_until`.
-- **SLO tracking** — `sso_sessions.participating_app_ids` for Single Logout propagation.
-- **Key rotation lifecycle** — `active → rotating → retired → revoked`.
-- **`updated_at` auto-trigger** — Postgres trigger, not application layer.
-- **RLS enabled** — Deny-all for `anon` and `authenticated` roles.
+- **Private keys encrypted at rest** — AES-256-GCM, key derived from `KEY_ENCRYPTION_SECRET` via scrypt
+- **Passwords hashed with Argon2id** — 64MB memory, 3 iterations, 4 parallelism (OWASP 2024)
+- **Client secrets hashed** — Argon2id, plaintext returned once at registration only
+- **Account lockout** — 5 failed attempts locks for 15 minutes
+- **SLO tracking** — `sso_sessions.participating_app_ids` for Single Logout
+- **Key rotation lifecycle** — `active → rotating → retired → revoked`
+- **`updated_at` auto-trigger** — Postgres trigger on all mutable tables
+- **RLS enabled** — Deny-all for `anon` and `authenticated` roles
 
 ---
 
 ## Schema Change Workflow
 
-> Apply migrations via Supabase SQL Editor — not `drizzle-kit migrate` (Drizzle 0.30 bug with array defaults).
+> Apply via Supabase SQL Editor — not `drizzle-kit migrate` (Drizzle 0.30 array default bug).
 
-**1.** Edit the schema file in `src/modules/*/infrastructure/*.schema.ts`
-
-**2.** Generate the diff:
 ```bash
-pnpm db:generate
+pnpm db:generate          # generate SQL diff
+# fix array defaults manually (see table below)
+# paste into Supabase SQL Editor → Run
+rm drizzle/migrations/*.sql && rm -rf drizzle/migrations/meta
 ```
-
-**3.** Fix known Drizzle 0.30 issues in the generated file:
 
 | Broken (Drizzle generates) | Correct |
 |---|---|
 | `text[] DEFAULT  NOT NULL` | `text[] DEFAULT '{}' NOT NULL` |
 | `text[] DEFAULT some_value NOT NULL` | `text[] DEFAULT ARRAY['some_value'] NOT NULL` |
-| `"inet"` column type (quoted) | `text` |
-
-**4.** Paste corrected SQL into **Supabase → SQL Editor → New query → Run**
-
-**5.** Clean up:
-```bash
-rm drizzle/migrations/*.sql
-rm -rf drizzle/migrations/meta
-```
+| `"inet"` column type | `text` |
 
 ---
 
 ## Key Management
 
-The IDP uses RSA-2048 (RS256) keys to sign all tokens and SAML assertions.
+### Endpoints
 
-### How it works
-
-- On startup, the server auto-generates an RS256 key if none exists
-- Private key is encrypted with AES-256-GCM before being stored in Postgres
-- scrypt derives the encryption key from `KEY_ENCRYPTION_SECRET`
-- Public key is exposed at `/.well-known/jwks.json` for SP verification
-- Active key is cached in Redis (5-minute TTL) to avoid DB reads per token
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| `GET` | `/.well-known/jwks.json` | Public | Get public signing keys |
+| `POST` | `/api/v1/admin/keys/generate` | Admin API key | Generate initial key |
+| `POST` | `/api/v1/admin/keys/rotate` | Admin API key | Rotate to new key |
 
 ### Key lifecycle
 
 ```
-generated → active → (rotate) → retired → (expire) → [stop publishing in JWKS]
+generated → active → (rotate) → retired → [stays in JWKS until tokens expire]
 ```
-
-- `active` — current primary key, signs all new tokens
-- `retired` — kept in JWKS for verifying tokens issued before rotation
-- `revoked` — compromised key, removed from JWKS immediately
 
 ### Rotation recommendations
 
-- Rotate every 60–80 days (before the 90-day expiry)
-- After rotation the retired key stays in JWKS until all its tokens expire
-- Never delete a retired key while tokens signed with it may still be valid
+- Rotate every 60–80 days (default expiry is 90 days)
+- Retired keys stay in JWKS — never delete while tokens signed with them exist
 
 ### Supported algorithms
 
-| Algorithm | Key type | Notes |
-|---|---|---|
-| `RS256` | RSA-2048 | Default — broadest SP compatibility |
-| `RS384` | RSA-2048 | Higher security |
-| `RS512` | RSA-4096 | Maximum RSA security |
-| `ES256` | EC P-256 | Smaller keys, modern SPs |
-| `ES384` | EC P-384 | Higher EC security |
-| `ES512` | EC P-521 | Maximum EC security |
+`RS256` (default), `RS384`, `RS512`, `ES256`, `ES384`, `ES512`
 
 ---
 
@@ -446,48 +361,30 @@ generated → active → (rotate) → retired → (expire) → [stop publishing 
 
 ```
 auth-idp/
-├── apps/
-│   └── api/
-│       ├── src/
-│       │   ├── shared/
-│       │   │   ├── result/               # Result<T,E> monad (isOk/isErr as methods)
-│       │   │   ├── errors/               # AppError hierarchy (ValidationError, etc.)
-│       │   │   ├── config/               # Zod-validated env — all vars here
-│       │   │   ├── logger/               # Pino — reads process.env directly
-│       │   │   └── container/            # Awilix DI — Cradle type, buildContainer()
-│       │   ├── infrastructure/
-│       │   │   ├── database/             # postgres.client.ts — Drizzle + schema
-│       │   │   ├── cache/                # redis.client.ts — ioredis + reconnect
-│       │   │   └── mongo/                # mongo.client.ts — Atlas + TTL indexes
-│       │   ├── database/
-│       │   │   └── index.ts              # Single re-export for all Drizzle schemas
-│       │   ├── modules/
-│       │   │   ├── applications/infrastructure/applications.schema.ts
-│       │   │   ├── users/infrastructure/users.schema.ts
-│       │   │   ├── sessions/infrastructure/sessions.schema.ts
-│       │   │   └── keys/
-│       │   │       ├── domain/SigningKey.ts
-│       │   │       ├── application/
-│       │   │       │   ├── ports/        # ISigningKeyRepository, IKeyEncryptionService
-│       │   │       │   │                 # IKeyGenerationService, IKeyCache
-│       │   │       │   └── use-cases/    # GenerateSigningKey, RotateSigningKey, GetJwks
-│       │   │       ├── infrastructure/
-│       │   │       │   ├── NodeCryptoKeyGenerationService.ts
-│       │   │       │   ├── AesKeyEncryptionService.ts
-│       │   │       │   ├── SupabaseSigningKeyRepository.ts
-│       │   │       │   └── RedisKeyCache.ts
-│       │   │       ├── interface/
-│       │   │       │   ├── KeyRoutes.ts
-│       │   │       │   └── KeyDTOs.ts
-│       │   │       └── index.ts
-│       │   ├── app.ts
-│       │   └── server.ts
-│       ├── drizzle/migrations/
-│       ├── drizzle.config.ts
-│       └── package.json
-├── packages/types/
-├── tsconfig.base.json
-└── pnpm-workspace.yaml
+├── apps/api/src/
+│   ├── shared/
+│   │   ├── result/          # Result<T,E> — isOk()/isErr() as methods
+│   │   ├── errors/          # AppError hierarchy
+│   │   ├── config/          # Zod env schema — all vars validated at startup
+│   │   ├── logger/          # Pino — reads process.env directly
+│   │   └── container/       # Awilix PROXY — Cradle type, buildContainer()
+│   ├── infrastructure/
+│   │   ├── database/        # Drizzle + postgres (prepare:false for Supavisor)
+│   │   ├── cache/           # ioredis + exponential backoff retry
+│   │   └── mongo/           # MongoDB Atlas + TTL indexes
+│   ├── database/
+│   │   └── index.ts         # Single re-export for all Drizzle schemas
+│   └── modules/
+│       ├── keys/            # M03 — RSA generation, AES encryption, JWKS, rotation
+│       │   ├── domain/SigningKey.ts
+│       │   ├── application/{ports,use-cases}
+│       │   ├── infrastructure/{NodeCrypto,Aes,Supabase,Redis}
+│       │   └── interface/{KeyRoutes,KeyDTOs}
+│       └── users/           # M04 — Registration, login, profile, sessions
+│           ├── domain/{User,UserProfile}
+│           ├── application/{ports,use-cases}
+│           ├── infrastructure/{Argon2,RedisSession,SupabaseUser}
+│           └── interface/{UserRoutes,AuthMiddleware}
 ```
 
 ---
@@ -498,9 +395,9 @@ auth-idp/
 |---|---|---|
 | M01 | Project foundation — monorepo, shared kernel, DB connections | ✅ Complete |
 | M02 | Database schema — 9 tables, indexes, RLS, triggers | ✅ Complete |
-| M03 | Key management — RSA/EC generation, AES-256-GCM encryption, JWKS, rotation | ✅ Complete |
-| M04 | User management — registration, login, Argon2, profiles | 🔜 Next |
-| M05 | Application registry — register SAML / OIDC / JWT apps | ⏳ Pending |
+| M03 | Key management — RSA/EC generation, AES-256-GCM, JWKS, rotation | ✅ Complete |
+| M04 | User management — registration, login, Argon2id, profiles, sessions | ✅ Complete |
+| M05 | Application registry — register SAML / OIDC / JWT apps | 🔜 Next |
 | M06 | OIDC / OAuth 2.0 — oidc-provider, all discovery endpoints | ⏳ Pending |
 | M07 | SAML 2.0 — IDP metadata, SSO flow, signed assertions | ⏳ Pending |
 | M08 | JWT / cert auth — client assertions RFC 7523, mTLS | ⏳ Pending |
@@ -516,34 +413,37 @@ auth-idp/
 | Layer | Technology | Purpose |
 |---|---|---|
 | Runtime | Node.js 20 + TypeScript 5 (strict) | Core language |
-| HTTP framework | Fastify 4 | API server |
-| DI container | Awilix (PROXY mode) | Dependency injection |
-| Database | Supabase (Postgres) via Drizzle ORM | Application data |
-| Cache | Redis Cloud via ioredis | Sessions, tokens, key cache |
-| Document store | MongoDB Atlas | Audit logs |
-| Validation | Zod | Env config + request validation |
-| Logging | Pino + pino-pretty | Structured JSON logs |
-| Testing | Vitest | Unit + integration tests |
-| Crypto | Node.js built-in `crypto` | RSA/EC key generation |
-| Key encryption | AES-256-GCM + scrypt | Private key encryption at rest |
-| JWK conversion | jose | Public key → JWK format for JWKS |
-| OIDC / OAuth | oidc-provider | OIDC spec (M06) |
-| SAML | samlify | SAML 2.0 (M07) |
+| HTTP | Fastify 4 | API server |
+| DI | Awilix (PROXY mode) | Dependency injection |
+| Database | Supabase (Postgres) + Drizzle ORM | Application data |
+| Cache | Redis Cloud + ioredis | Sessions, tokens, key cache |
+| Documents | MongoDB Atlas | Audit logs |
+| Validation | Zod | Env + request validation |
+| Logging | Pino + pino-pretty | Structured JSON |
+| Testing | Vitest | Unit tests (mocked ports) |
+| Crypto | Node.js `crypto` | RSA/EC key generation |
+| Key encryption | AES-256-GCM + scrypt | Private keys at rest |
+| Password hashing | Argon2id | User passwords |
+| JWK conversion | jose | JWKS endpoint |
+| OIDC / OAuth | oidc-provider | M06 |
+| SAML | samlify | M07 |
 
 ---
 
 ## Troubleshooting
 
-| Error | Cause | Fix |
-|---|---|---|
-| `❌ Invalid environment variables` | `.env` missing or incomplete | Ensure all vars set including `ADMIN_API_KEY` |
-| `getConfig() called before loadConfig()` | Import order issue | Logger reads `process.env` directly — ensure server.ts calls `loadConfig()` first |
-| `Redis max retries reached` | Wrong `REDIS_URL` | Use `rediss://` (double s) from Redis Cloud |
-| `MongoDB not connected` | Wrong URI or IP not whitelisted | Check Atlas Network Access |
-| `401` on admin routes | Wrong `ADMIN_API_KEY` | Use exact value from `.env` — no quotes, no spaces around `=` |
-| `409 Conflict` on key generate | Key already exists | Use `/rotate` to replace |
-| `isOk is not a function` | Stale tsx module cache | Stop server, `rm -rf node_modules/.cache`, restart |
-| Drizzle array default error | Drizzle 0.30 bug | Apply SQL via Supabase SQL Editor |
+| Error | Fix |
+|---|---|
+| `❌ Invalid environment variables` | All vars required — check `ADMIN_API_KEY` is set |
+| `401` on admin routes | Exact value from `.env` — no quotes, no spaces around `=` |
+| `401` on `/auth/me` | Pass `Authorization: Bearer TOKEN` from login response |
+| `409` on register | Email already exists — use different email |
+| `422` on register | Password needs 8+ chars, uppercase, lowercase, number |
+| `409` on key generate | Use `/rotate` — key already exists from bootstrap |
+| `isOk is not a function` | Stop server, `rm -rf node_modules/.cache`, restart |
+| Drizzle array default error | Apply SQL via Supabase SQL Editor |
+| `Redis max retries` | Wrong `REDIS_URL` — use `rediss://` from Redis Cloud |
+| `MongoDB not connected` | Check Atlas Network Access — add your IP |
 
 ---
 

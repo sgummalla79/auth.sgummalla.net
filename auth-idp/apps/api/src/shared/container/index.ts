@@ -14,6 +14,12 @@ import type { IKeyCache } from '../../modules/keys/application/ports/IKeyCache.j
 import type { GenerateSigningKeyUseCase } from '../../modules/keys/application/use-cases/GenerateSigningKey.js'
 import type { RotateSigningKeyUseCase } from '../../modules/keys/application/use-cases/RotateSigningKey.js'
 import type { GetJwksUseCase } from '../../modules/keys/application/use-cases/GetJwks.js'
+import type { IUserRepository } from '../../modules/users/application/ports/IUserRepository.js'
+import type { IHashService } from '../../modules/users/application/ports/IHashService.js'
+import type { ISessionStore } from '../../modules/users/application/ports/ISessionStore.js'
+import type { RegisterUserUseCase } from '../../modules/users/application/use-cases/RegisterUser.js'
+import type { LoginUserUseCase } from '../../modules/users/application/use-cases/LoginUser.js'
+import type { GetUserProfileUseCase, UpdateUserProfileUseCase } from '../../modules/users/application/use-cases/UserProfile.js'
 
 export interface Cradle {
   db: DrizzleClient
@@ -28,6 +34,13 @@ export interface Cradle {
   generateSigningKeyUseCase: GenerateSigningKeyUseCase
   rotateSigningKeyUseCase: RotateSigningKeyUseCase
   getJwksUseCase: GetJwksUseCase
+  userRepository: IUserRepository
+  hashService: IHashService
+  sessionStore: ISessionStore
+  registerUserUseCase: RegisterUserUseCase
+  loginUserUseCase: LoginUserUseCase
+  getUserProfileUseCase: GetUserProfileUseCase
+  updateUserProfileUseCase: UpdateUserProfileUseCase
 }
 
 export type AppContainer = AwilixContainer<Cradle>

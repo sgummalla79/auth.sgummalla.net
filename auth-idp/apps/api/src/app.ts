@@ -11,6 +11,7 @@ import { isAppError } from './shared/errors/AppError.js'
 import { checkPostgresHealth } from './infrastructure/database/postgres.client.js'
 import { checkRedisHealth } from './infrastructure/cache/redis.client.js'
 import { checkMongoHealth } from './infrastructure/mongo/mongo.client.js'
+import { registerUserModule, registerUserRoutes } from './modules/users/index.js'
 
 const logger = createLogger('app')
 
@@ -46,6 +47,7 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   const container = buildContainer()
   registerKeyModule(container)
+  registerUserModule(container)
   app.decorate('container', container)
 
   app.addHook('onRequest', async (request: FastifyRequest) => {
@@ -75,6 +77,14 @@ export async function buildApp(): Promise<FastifyInstance> {
     generateSigningKeyUseCase: container.cradle.generateSigningKeyUseCase,
     rotateSigningKeyUseCase: container.cradle.rotateSigningKeyUseCase,
     config: container.cradle.config,
+  })
+
+  await registerUserRoutes(app, {
+    registerUserUseCase: container.cradle.registerUserUseCase,
+    loginUserUseCase: container.cradle.loginUserUseCase,
+    getUserProfileUseCase: container.cradle.getUserProfileUseCase,
+    updateUserProfileUseCase: container.cradle.updateUserProfileUseCase,
+    sessionStore: container.cradle.sessionStore,
   })
 
   app.get('/health', async (_request: FastifyRequest, reply: FastifyReply) => {
