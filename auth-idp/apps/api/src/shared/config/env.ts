@@ -5,20 +5,16 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   HOST: z.string().default('0.0.0.0'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
-
   DATABASE_URL: z.string().url(),
   DATABASE_URL_DIRECT: z.string().url(),
-
   REDIS_URL: z.string().url(),
-
   MONGODB_URI: z.string().min(1),
   MONGODB_DB_NAME: z.string().min(1).default('idp_audit'),
-
   IDP_ISSUER: z.string().url(),
   IDP_BASE_URL: z.string().url(),
-
   KEY_ENCRYPTION_SECRET: z.string().min(32),
   COOKIE_SECRET: z.string().min(32),
+  ADMIN_API_KEY: z.string().min(32),   // ← add this line
 })
 
 export type Env = z.infer<typeof envSchema>

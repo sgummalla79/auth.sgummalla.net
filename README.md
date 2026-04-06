@@ -18,6 +18,7 @@ Built with Node.js, TypeScript, Fastify, Supabase (Postgres), Redis Cloud, and M
 - [Testing with cURL](#testing-with-curl)
 - [Database Schema](#database-schema)
 - [Schema Change Workflow](#schema-change-workflow)
+- [Key Management](#key-management)
 - [Project Structure](#project-structure)
 - [Module Status](#module-status)
 - [Tech Stack](#tech-stack)
@@ -161,9 +162,11 @@ MONGODB_DB_NAME=idp_audit
 IDP_ISSUER=http://localhost:3000
 IDP_BASE_URL=http://localhost:3000
 
-# ── Secrets ───────────────────────────────────────────────────────────────────
+# ── Secrets — generate each with: ────────────────────────────────────────────
+# node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 KEY_ENCRYPTION_SECRET=GENERATE_THIS
 COOKIE_SECRET=GENERATE_THIS
+ADMIN_API_KEY=GENERATE_THIS
 ```
 
 ### Where to find each value
@@ -179,20 +182,20 @@ COOKIE_SECRET=GENERATE_THIS
 
 ## Generate Secrets
 
-Run this command **twice** — once for each secret:
+Run this command **three times** — once for each secret:
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-Copy each output into `.env`:
-
 ```env
-KEY_ENCRYPTION_SECRET=a3f8c2d1...   # first run
-COOKIE_SECRET=9f2e1d4c...           # second run
+KEY_ENCRYPTION_SECRET=first_output_here
+COOKIE_SECRET=second_output_here
+ADMIN_API_KEY=third_output_here
 ```
 
-> Never reuse the same value for both. Never commit `.env` to git.
+> Never reuse the same value for multiple secrets. Never commit `.env` to git.
+> Do not wrap values in quotes — `--env-file` includes them literally.
 
 ---
 
@@ -207,6 +210,14 @@ pnpm dev
 cd apps/api && pnpm dev
 ```
 
+On startup the server automatically checks for a signing key and generates
+one if none exists. You should see in the logs:
+
+```
+No active signing key — generating initial RS256 key
+Initial signing key generated  kid=key_a1b2c3d4e5f6g7h8
+```
+
 ### Production build
 
 ```bash
@@ -218,6 +229,14 @@ pnpm start
 
 ```bash
 pnpm test
+```
+
+Expected output:
+```
+✓ src/__tests__/Result.test.ts            (8 tests)
+✓ src/__tests__/schema.test.ts            (14 tests)
+✓ src/__tests__/keys/AesKeyEncryptionService.test.ts     (5 tests)
+✓ src/__tests__/keys/NodeCryptoKeyGenerationService.test.ts  (4 tests)
 ```
 
 ---
@@ -234,12 +253,7 @@ Expected:
 ```json
 {
   "status": "ok",
-  "timestamp": "2026-04-05T12:00:00.000Z",
-  "services": {
-    "postgres": "ok",
-    "redis": "ok",
-    "mongodb": "ok"
-  }
+  "services": { "postgres": "ok", "redis": "ok", "mongodb": "ok" }
 }
 ```
 
@@ -249,33 +263,88 @@ Expected:
 curl http://localhost:3000/ready
 ```
 
-### 404 handler
+### JWKS endpoint — public key used by all service providers
 
 ```bash
-curl http://localhost:3000/does-not-exist | jq
+curl http://localhost:3000/.well-known/jwks.json | jq
 ```
 
-### Rate limiting — confirm limiter fires after 100 requests
+Expected:
+```json
+{
+  "keys": [
+    {
+      "kty": "RSA",
+      "use": "sig",
+      "alg": "RS256",
+      "kid": "key_a1b2c3d4",
+      "n": "...",
+      "e": "AQAB"
+    }
+  ]
+}
+```
+
+### Generate a signing key (admin)
+
+Returns `409 Conflict` if a key already exists — use rotate instead.
+
+```bash
+curl -s -X POST http://localhost:3000/api/v1/admin/keys/generate \
+  -H "Authorization: Bearer YOUR_ADMIN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"algorithm": "RS256", "expiresInDays": 90}' | jq
+```
+
+### Rotate the signing key (admin)
+
+Retires the current key and creates a new active key. The retired key stays
+in JWKS so existing tokens remain verifiable until they expire.
+
+```bash
+curl -s -X POST http://localhost:3000/api/v1/admin/keys/rotate \
+  -H "Authorization: Bearer YOUR_ADMIN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{}' | jq
+```
+
+Expected:
+```json
+{
+  "kid": "key_newkidhere",
+  "algorithm": "RS256",
+  "status": "active",
+  "message": "Key rotated. Previous key is now retired."
+}
+```
+
+### Unauthorized access — verify auth is enforced
+
+```bash
+curl -s -X POST http://localhost:3000/api/v1/admin/keys/rotate \
+  -H "Authorization: Bearer wrongkey" | jq
+```
+
+Expected: `401 Unauthorized`
+
+### Rate limiting
 
 ```bash
 for i in {1..110}; do curl -s http://localhost:3000/ready; done | tail -3 | jq
 ```
 
-### Security headers — confirm Helmet is active
+### Security headers
 
 ```bash
 curl -I http://localhost:3000/health
 ```
 
-Look for `x-frame-options`, `x-content-type-options`, and `strict-transport-security`.
-
 ---
 
 ## Database Schema
 
-All schema is managed via **Drizzle ORM**. Each table lives in its module's
-`infrastructure/` folder. The single import point for all schemas is
-`src/database/index.ts`.
+All schema managed via **Drizzle ORM**. Each table lives in its module's
+`infrastructure/` folder. Single import point: `src/database/index.ts`.
 
 ### Tables
 
@@ -293,33 +362,28 @@ All schema is managed via **Drizzle ORM**. Each table lives in its module's
 
 ### Key design decisions
 
-- **Private keys encrypted at rest** — `signing_keys.encrypted_private_key` is AES-256-GCM encrypted using `KEY_ENCRYPTION_SECRET`. IV stored separately in `encryption_iv`.
-- **Client secrets hashed** — `oidc_clients.client_secret_hash` uses Argon2id. Plaintext returned once at registration only.
-- **Account lockout** — `users.failed_login_attempts` + `users.locked_until` support brute-force protection.
-- **SLO tracking** — `sso_sessions.participating_app_ids` lists every SP the user visited. Used to notify all SPs on logout.
-- **Key rotation lifecycle** — `signing_keys.status` progresses: `active → rotating → retired → revoked`.
-- **`updated_at` auto-trigger** — Postgres trigger keeps `updated_at` accurate without relying on the application layer.
-- **RLS enabled** — All tables deny direct access from `anon` and `authenticated` roles. The IDP API uses the service role key which bypasses RLS.
+- **Private keys encrypted at rest** — AES-256-GCM using `KEY_ENCRYPTION_SECRET`. IV stored separately in `encryption_iv`.
+- **Client secrets hashed** — Argon2id. Plaintext returned once at registration only.
+- **Account lockout** — `users.failed_login_attempts` + `users.locked_until`.
+- **SLO tracking** — `sso_sessions.participating_app_ids` for Single Logout propagation.
+- **Key rotation lifecycle** — `active → rotating → retired → revoked`.
+- **`updated_at` auto-trigger** — Postgres trigger, not application layer.
+- **RLS enabled** — Deny-all for `anon` and `authenticated` roles.
 
 ---
 
 ## Schema Change Workflow
 
-> Drizzle Kit is used to **generate** SQL diffs only. Migrations are applied
-> directly via the Supabase SQL Editor — this is more reliable than
-> `drizzle-kit migrate` due to Drizzle 0.30 bugs with array defaults.
+> Apply migrations via Supabase SQL Editor — not `drizzle-kit migrate` (Drizzle 0.30 bug with array defaults).
 
-### For every future schema change:
-
-**1.** Edit the relevant schema file in `src/modules/*/infrastructure/*.schema.ts`
+**1.** Edit the schema file in `src/modules/*/infrastructure/*.schema.ts`
 
 **2.** Generate the diff:
 ```bash
-cd apps/api
 pnpm db:generate
 ```
 
-**3.** Review the generated file in `drizzle/migrations/` — fix these known Drizzle 0.30 issues manually if present:
+**3.** Fix known Drizzle 0.30 issues in the generated file:
 
 | Broken (Drizzle generates) | Correct |
 |---|---|
@@ -327,13 +391,54 @@ pnpm db:generate
 | `text[] DEFAULT some_value NOT NULL` | `text[] DEFAULT ARRAY['some_value'] NOT NULL` |
 | `"inet"` column type (quoted) | `text` |
 
-**4.** Paste the corrected SQL into **Supabase → SQL Editor → New query** → Run
+**4.** Paste corrected SQL into **Supabase → SQL Editor → New query → Run**
 
-**5.** Clean up after applying:
+**5.** Clean up:
 ```bash
 rm drizzle/migrations/*.sql
 rm -rf drizzle/migrations/meta
 ```
+
+---
+
+## Key Management
+
+The IDP uses RSA-2048 (RS256) keys to sign all tokens and SAML assertions.
+
+### How it works
+
+- On startup, the server auto-generates an RS256 key if none exists
+- Private key is encrypted with AES-256-GCM before being stored in Postgres
+- scrypt derives the encryption key from `KEY_ENCRYPTION_SECRET`
+- Public key is exposed at `/.well-known/jwks.json` for SP verification
+- Active key is cached in Redis (5-minute TTL) to avoid DB reads per token
+
+### Key lifecycle
+
+```
+generated → active → (rotate) → retired → (expire) → [stop publishing in JWKS]
+```
+
+- `active` — current primary key, signs all new tokens
+- `retired` — kept in JWKS for verifying tokens issued before rotation
+- `revoked` — compromised key, removed from JWKS immediately
+
+### Rotation recommendations
+
+- Rotate every 60–80 days (before the 90-day expiry)
+- After rotation the retired key stays in JWKS until all its tokens expire
+- Never delete a retired key while tokens signed with it may still be valid
+
+### Supported algorithms
+
+| Algorithm | Key type | Notes |
+|---|---|---|
+| `RS256` | RSA-2048 | Default — broadest SP compatibility |
+| `RS384` | RSA-2048 | Higher security |
+| `RS512` | RSA-4096 | Maximum RSA security |
+| `ES256` | EC P-256 | Smaller keys, modern SPs |
+| `ES384` | EC P-384 | Higher EC security |
+| `ES512` | EC P-521 | Maximum EC security |
 
 ---
 
@@ -342,45 +447,47 @@ rm -rf drizzle/migrations/meta
 ```
 auth-idp/
 ├── apps/
-│   └── api/                              # Core IDP API (Fastify)
+│   └── api/
 │       ├── src/
-│       │   ├── shared/                   # Shared kernel — no external deps
-│       │   │   ├── result/               # Result<T,E> monad
-│       │   │   ├── errors/               # Typed AppError hierarchy
-│       │   │   ├── config/               # Zod-validated env config
-│       │   │   ├── logger/               # Pino structured logger
-│       │   │   └── container/            # Awilix DI container + Cradle type
-│       │   ├── infrastructure/           # External adapters (swappable)
-│       │   │   ├── database/             # Postgres via Drizzle ORM
-│       │   │   ├── cache/                # Redis Cloud via ioredis
-│       │   │   └── mongo/                # MongoDB Atlas
+│       │   ├── shared/
+│       │   │   ├── result/               # Result<T,E> monad (isOk/isErr as methods)
+│       │   │   ├── errors/               # AppError hierarchy (ValidationError, etc.)
+│       │   │   ├── config/               # Zod-validated env — all vars here
+│       │   │   ├── logger/               # Pino — reads process.env directly
+│       │   │   └── container/            # Awilix DI — Cradle type, buildContainer()
+│       │   ├── infrastructure/
+│       │   │   ├── database/             # postgres.client.ts — Drizzle + schema
+│       │   │   ├── cache/                # redis.client.ts — ioredis + reconnect
+│       │   │   └── mongo/                # mongo.client.ts — Atlas + TTL indexes
 │       │   ├── database/
-│       │   │   └── index.ts              # Single re-export for all schemas
-│       │   ├── modules/                  # Feature modules
-│       │   │   ├── applications/
-│       │   │   │   └── infrastructure/
-│       │   │   │       └── applications.schema.ts
-│       │   │   ├── users/
-│       │   │   │   └── infrastructure/
-│       │   │   │       └── users.schema.ts
-│       │   │   ├── keys/
-│       │   │   │   └── infrastructure/
-│       │   │   │       └── keys.schema.ts
-│       │   │   └── sessions/
-│       │   │       └── infrastructure/
-│       │   │           └── sessions.schema.ts
-│       │   ├── app.ts                    # Fastify app factory
-│       │   └── server.ts                 # Process entry point
-│       ├── drizzle/
-│       │   └── migrations/               # Generated SQL diffs (applied via Supabase)
+│       │   │   └── index.ts              # Single re-export for all Drizzle schemas
+│       │   ├── modules/
+│       │   │   ├── applications/infrastructure/applications.schema.ts
+│       │   │   ├── users/infrastructure/users.schema.ts
+│       │   │   ├── sessions/infrastructure/sessions.schema.ts
+│       │   │   └── keys/
+│       │   │       ├── domain/SigningKey.ts
+│       │   │       ├── application/
+│       │   │       │   ├── ports/        # ISigningKeyRepository, IKeyEncryptionService
+│       │   │       │   │                 # IKeyGenerationService, IKeyCache
+│       │   │       │   └── use-cases/    # GenerateSigningKey, RotateSigningKey, GetJwks
+│       │   │       ├── infrastructure/
+│       │   │       │   ├── NodeCryptoKeyGenerationService.ts
+│       │   │       │   ├── AesKeyEncryptionService.ts
+│       │   │       │   ├── SupabaseSigningKeyRepository.ts
+│       │   │       │   └── RedisKeyCache.ts
+│       │   │       ├── interface/
+│       │   │       │   ├── KeyRoutes.ts
+│       │   │       │   └── KeyDTOs.ts
+│       │   │       └── index.ts
+│       │   ├── app.ts
+│       │   └── server.ts
+│       ├── drizzle/migrations/
 │       ├── drizzle.config.ts
-│       ├── vitest.config.ts
 │       └── package.json
-├── packages/
-│   └── types/                            # Shared TypeScript types
+├── packages/types/
 ├── tsconfig.base.json
-├── pnpm-workspace.yaml
-└── package.json
+└── pnpm-workspace.yaml
 ```
 
 ---
@@ -391,8 +498,8 @@ auth-idp/
 |---|---|---|
 | M01 | Project foundation — monorepo, shared kernel, DB connections | ✅ Complete |
 | M02 | Database schema — 9 tables, indexes, RLS, triggers | ✅ Complete |
-| M03 | Key management — RSA key generation, JWKS endpoint, rotation | 🔜 Next |
-| M04 | User management — registration, login, Argon2, profiles | ⏳ Pending |
+| M03 | Key management — RSA/EC generation, AES-256-GCM encryption, JWKS, rotation | ✅ Complete |
+| M04 | User management — registration, login, Argon2, profiles | 🔜 Next |
 | M05 | Application registry — register SAML / OIDC / JWT apps | ⏳ Pending |
 | M06 | OIDC / OAuth 2.0 — oidc-provider, all discovery endpoints | ⏳ Pending |
 | M07 | SAML 2.0 — IDP metadata, SSO flow, signed assertions | ⏳ Pending |
@@ -412,14 +519,16 @@ auth-idp/
 | HTTP framework | Fastify 4 | API server |
 | DI container | Awilix (PROXY mode) | Dependency injection |
 | Database | Supabase (Postgres) via Drizzle ORM | Application data |
-| Cache | Redis Cloud via ioredis | Sessions, tokens, rate limiting |
+| Cache | Redis Cloud via ioredis | Sessions, tokens, key cache |
 | Document store | MongoDB Atlas | Audit logs |
 | Validation | Zod | Env config + request validation |
 | Logging | Pino + pino-pretty | Structured JSON logs |
 | Testing | Vitest | Unit + integration tests |
-| OIDC / OAuth | oidc-provider | OIDC spec implementation |
-| SAML | samlify | SAML 2.0 implementation |
-| JWT / Crypto | jose + node-forge | Key management, JWT signing |
+| Crypto | Node.js built-in `crypto` | RSA/EC key generation |
+| Key encryption | AES-256-GCM + scrypt | Private key encryption at rest |
+| JWK conversion | jose | Public key → JWK format for JWKS |
+| OIDC / OAuth | oidc-provider | OIDC spec (M06) |
+| SAML | samlify | SAML 2.0 (M07) |
 
 ---
 
@@ -427,13 +536,14 @@ auth-idp/
 
 | Error | Cause | Fix |
 |---|---|---|
-| `❌ Invalid environment variables` | `.env` missing or wrong path | Ensure `apps/api/.env` exists with all values filled |
-| `getConfig() called before loadConfig()` | Logger imported before config | Fixed — logger reads `process.env` directly |
-| `Redis max retries reached` | Wrong `REDIS_URL` | Use `rediss://` (double s) from Redis Cloud dashboard |
-| `MongoDB not connected` | Wrong URI or IP not whitelisted | Check Atlas Network Access → add your IP |
-| `prepare: false` error | Supabase pooler incompatibility | Already set in `postgres.client.ts` |
-| Port already in use | Another process on 3000 | Set `PORT=3001` in `.env` |
-| Drizzle array default syntax error | Drizzle 0.30 bug | Apply SQL via Supabase SQL Editor — see Schema Change Workflow |
+| `❌ Invalid environment variables` | `.env` missing or incomplete | Ensure all vars set including `ADMIN_API_KEY` |
+| `getConfig() called before loadConfig()` | Import order issue | Logger reads `process.env` directly — ensure server.ts calls `loadConfig()` first |
+| `Redis max retries reached` | Wrong `REDIS_URL` | Use `rediss://` (double s) from Redis Cloud |
+| `MongoDB not connected` | Wrong URI or IP not whitelisted | Check Atlas Network Access |
+| `401` on admin routes | Wrong `ADMIN_API_KEY` | Use exact value from `.env` — no quotes, no spaces around `=` |
+| `409 Conflict` on key generate | Key already exists | Use `/rotate` to replace |
+| `isOk is not a function` | Stale tsx module cache | Stop server, `rm -rf node_modules/.cache`, restart |
+| Drizzle array default error | Drizzle 0.30 bug | Apply SQL via Supabase SQL Editor |
 
 ---
 

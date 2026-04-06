@@ -62,3 +62,8 @@ export class ServiceUnavailableError extends AppError {
 export function isAppError(value: unknown): value is AppError {
   return value instanceof AppError
 }
+
+export class CacheError extends AppError {
+  readonly code = 'CACHE_ERROR' as const
+  readonly statusCode = 500
+}

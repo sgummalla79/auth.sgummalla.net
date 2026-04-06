@@ -1,3 +1,4 @@
+import { registerKeyModule, registerKeyRoutes } from './modules/keys/index.js'
 import Fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import fastifyCookie from '@fastify/cookie'
 import fastifyCors from '@fastify/cors'
@@ -44,6 +45,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   })
 
   const container = buildContainer()
+  registerKeyModule(container)
   app.decorate('container', container)
 
   app.addHook('onRequest', async (request: FastifyRequest) => {
@@ -66,6 +68,13 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   app.setNotFoundHandler((request: FastifyRequest, reply: FastifyReply) => {
     return reply.status(404).send({ code: 'NOT_FOUND', message: `Route ${request.method} ${request.url} not found.` })
+  })
+
+  await registerKeyRoutes(app, {
+    getJwksUseCase: container.cradle.getJwksUseCase,
+    generateSigningKeyUseCase: container.cradle.generateSigningKeyUseCase,
+    rotateSigningKeyUseCase: container.cradle.rotateSigningKeyUseCase,
+    config: container.cradle.config,
   })
 
   app.get('/health', async (_request: FastifyRequest, reply: FastifyReply) => {

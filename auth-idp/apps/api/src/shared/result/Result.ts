@@ -1,9 +1,10 @@
 export type Result<T, E = unknown> = Ok<T, E> | Err<T, E>
 
-export class Ok<T, E> {
-  readonly isOk = true as const
-  readonly isErr = false as const
+export class Ok<T, E = never> {
+  readonly _tag = 'ok' as const
   constructor(public readonly value: T) {}
+  isOk(): this is Ok<T, E> { return true }
+  isErr(): this is Err<T, E> { return false }
   map<U>(fn: (value: T) => U): Result<U, E> { return ok(fn(this.value)) }
   mapErr<F>(_fn: (error: E) => F): Result<T, F> { return ok(this.value) }
   andThen<U>(fn: (value: T) => Result<U, E>): Result<U, E> { return fn(this.value) }
@@ -11,10 +12,11 @@ export class Ok<T, E> {
   unwrap(): T { return this.value }
 }
 
-export class Err<T, E> {
-  readonly isOk = false as const
-  readonly isErr = true as const
+export class Err<T = never, E = unknown> {
+  readonly _tag = 'err' as const
   constructor(public readonly error: E) {}
+  isOk(): this is Ok<T, E> { return false }
+  isErr(): this is Err<T, E> { return true }
   map<U>(_fn: (value: T) => U): Result<U, E> { return err(this.error) }
   mapErr<F>(fn: (error: E) => F): Result<T, F> { return err(fn(this.error)) }
   andThen<U>(_fn: (value: T) => Result<U, E>): Result<U, E> { return err(this.error) }
