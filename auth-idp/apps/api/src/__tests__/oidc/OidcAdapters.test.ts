@@ -2,31 +2,34 @@ import { describe, it, expect } from 'vitest'
 
 describe('RedisOidcAdapter', () => {
   it('has correct name', async () => {
-    const { RedisOidcAdapter } = await import('../../modules/oidc/adapter/RedisOidcAdapter.js')
+    const { OidcAdapter, initOidcAdapter } = await import('../../modules/oidc/adapter/RedisOidcAdapter.js')
     const mockRedis = {
       pipeline: () => ({ setex: () => mockRedis.pipeline(), set: () => mockRedis.pipeline(), del: () => mockRedis.pipeline(), exec: async () => [] }),
       get: async () => null,
       smembers: async () => [],
       hset: async () => 1,
     } as any
-    const adapter = new RedisOidcAdapter('AccessToken', mockRedis)
+    initOidcAdapter(mockRedis, () => ({} as any), { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} } as any)
+    const adapter = new OidcAdapter('AccessToken')
     expect(adapter.name).toBe('AccessToken')
   })
 
   it('returns undefined for missing key', async () => {
-    const { RedisOidcAdapter } = await import('../../modules/oidc/adapter/RedisOidcAdapter.js')
+    const { OidcAdapter, initOidcAdapter } = await import('../../modules/oidc/adapter/RedisOidcAdapter.js')
     const mockRedis = { get: async () => null } as any
-    const adapter = new RedisOidcAdapter('Session', mockRedis)
+    initOidcAdapter(mockRedis, () => ({} as any), { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} } as any)
+    const adapter = new OidcAdapter('AccessToken')
     expect(await adapter.find('nonexistent')).toBeUndefined()
   })
 
   it('parses stored JSON correctly', async () => {
-    const { RedisOidcAdapter } = await import('../../modules/oidc/adapter/RedisOidcAdapter.js')
+    const { OidcAdapter, initOidcAdapter } = await import('../../modules/oidc/adapter/RedisOidcAdapter.js')
     const payload = { sub: 'user-123', iat: 1234567890 }
     const mockRedis = {
       get: async (key: string) => key.includes('test-id') ? JSON.stringify(payload) : null,
     } as any
-    const adapter = new RedisOidcAdapter('AccessToken', mockRedis)
+    initOidcAdapter(mockRedis, () => ({} as any), { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} } as any)
+    const adapter = new OidcAdapter('AccessToken')
     expect(await adapter.find('test-id')).toEqual(payload)
   })
 })

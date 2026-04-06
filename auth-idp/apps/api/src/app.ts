@@ -14,6 +14,8 @@ import { checkMongoHealth } from './infrastructure/mongo/mongo.client.js'
 import { registerUserModule, registerUserRoutes } from './modules/users/index.js'
 import { registerApplicationModule, registerApplicationRoutes } from './modules/applications/index.js'
 import { registerOidcModule } from './modules/oidc/index.js'
+import { registerSamlModule } from './modules/saml/index.js'
+import fastifyFormBody from '@fastify/formbody'
 
 const logger = createLogger('app')
 
@@ -52,6 +54,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   registerUserModule(container)
   registerApplicationModule(container)
   await registerOidcModule(app, container) 
+  await registerSamlModule(app)
   app.decorate('container', container)
 
   app.addHook('onRequest', async (request: FastifyRequest) => {
@@ -75,6 +78,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   app.setNotFoundHandler((request: FastifyRequest, reply: FastifyReply) => {
     return reply.status(404).send({ code: 'NOT_FOUND', message: `Route ${request.method} ${request.url} not found.` })
   })
+
+  await app.register(fastifyFormBody)
 
   await registerKeyRoutes(app, {
     getJwksUseCase: container.cradle.getJwksUseCase,

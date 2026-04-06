@@ -79,17 +79,38 @@ export class SupabaseApplicationRepository implements IApplicationRepository {
 
   async findWithConfig(id: string): Promise<Result<ApplicationWithConfig, NotFoundError | DatabaseError>> {
     try {
-      const app = await this.db.query.applications.findFirst({
-        where: eq(applications.id, id),
-        with: { samlConfig: true, oidcClient: true, jwtConfig: true },
+      const row = await this.db
+        .select()
+        .from(applications)
+        .where(eq(applications.id, id))
+        .limit(1)
+        .then(rows => rows[0])
+
+      if (!row) {
+        return err(new NotFoundError(`Application not found: ${id}`))
+      }
+
+      const application = this.toDomain(row)
+
+      const [samlRows, oidcRows, jwtRows] = await Promise.all([
+        this.db.select().from(samlConfigs).where(eq(samlConfigs.applicationId, id)),
+        this.db.select().from(oidcClients).where(eq(oidcClients.applicationId, id)),
+        this.db.select().from(jwtConfigs).where(eq(jwtConfigs.applicationId, id)),
+      ])
+
+      return ok({
+        application,
+        samlConfig:  samlRows[0]  ? this.toSamlDomain(samlRows[0])  : undefined,
+        oidcClient:  oidcRows[0]  ? this.toOidcDomain(oidcRows[0])  : undefined,
+        jwtConfig:   jwtRows[0]   ? this.toJwtDomain(jwtRows[0])    : undefined,
       })
-      if (!app) return err(new NotFoundError(`Application not found: ${id}`))
-      const result: ApplicationWithConfig = { application: this.toDomain(app) }
-      if (app.samlConfig) result.samlConfig = this.toSamlDomain(app.samlConfig)
-      if (app.oidcClient) result.oidcClient = this.toOidcDomain(app.oidcClient)
-      if (app.jwtConfig) result.jwtConfig = this.toJwtDomain(app.jwtConfig)
-      return ok(result)
-    } catch (e) { return err(new DatabaseError(`Failed to find application with config: ${id}`, e)) }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      if (message.includes('invalid input syntax for type uuid')) {
+        return err(new NotFoundError(`Application not found: ${id}`))
+      }
+      return err(new DatabaseError(`Failed to find application with config: ${id}`, e))
+    }
   }
 
   async saveSamlConfig(input: CreateSamlConfigInput): Promise<Result<SamlConfig, DatabaseError>> {
