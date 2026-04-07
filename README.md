@@ -23,6 +23,7 @@ Built with Node.js, TypeScript, Fastify, Supabase (Postgres), Redis Cloud, and M
 - [OIDC / OAuth 2.0](#oidc--oauth-20)
 - [SAML 2.0](#saml-20)
 - [JWT / Certificate Auth](#jwt--certificate-auth)
+- [MFA](#mfa)
 - [Project Structure](#project-structure)
 - [Module Status](#module-status)
 - [Tech Stack](#tech-stack)
@@ -159,6 +160,7 @@ INFO: Signing key bootstrapped
 INFO: OIDC provider mounted
 INFO: SAML 2.0 module registered
 INFO: JWT / cert auth module registered
+INFO: MFA module registered
 INFO: Server listening on port 3000
 ```
 
@@ -211,7 +213,7 @@ curl -s -X POST http://localhost:3000/auth/logout \
 | Table | Purpose |
 |---|---|
 | `signing_keys` | RSA/EC key pairs (private key AES-256-GCM encrypted) |
-| `users` | Accounts — email, Argon2id hash, status, lockout |
+| `users` | Accounts — email, Argon2id hash, status, lockout, MFA fields |
 | `user_profiles` | OIDC claims — name, picture, locale, custom attributes |
 | `applications` | Registered SPs — SAML, OIDC, JWT |
 | `saml_configs` | Per-app SAML config — entityId, ACS URL, attributeMappings |
@@ -266,28 +268,22 @@ Keys are auto-bootstrapped at startup. Retired keys stay in JWKS until all token
 | `POST /oidc/revoke` | Token revocation |
 | `GET /oidc/end_session` | Logout |
 
-Use [oauthdebugger.com](https://oauthdebugger.com) to run the full PKCE authorization code flow interactively.
-
 ---
 
 ## SAML 2.0
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /saml/:appId/metadata` | IDP metadata XML — give this URL to the SP |
-| `POST /saml/:appId/sso` | SSO entry point — receives AuthnRequest |
+| `GET /saml/:appId/metadata` | IDP metadata XML |
+| `POST /saml/:appId/sso` | SSO entry point |
 | `POST /saml/:appId/sso/login` | Credential submit during SSO |
-| `POST /saml/:appId/slo` | Single Logout — receives LogoutRequest |
-
-Assertions are signed with the active M03 RSA key. Attribute mappings convert user profile fields to SP-specific attribute name URIs configured per-app.
+| `POST /saml/:appId/slo` | Single Logout |
 
 ---
 
 ## JWT / Certificate Auth
 
 ### RFC 7523 — Client Assertion
-
-The M2M client signs a short-lived JWT with its own private key. The IDP verifies against the registered public key and issues an access token. No secret ever crosses the wire.
 
 ```bash
 curl -s -X POST http://localhost:3000/auth/token/jwt-assertion \
@@ -297,18 +293,34 @@ curl -s -X POST http://localhost:3000/auth/token/jwt-assertion \
   --data-urlencode "client_assertion=SIGNED_JWT" | jq
 ```
 
-### mTLS — Certificate Auth
-
-The reverse proxy verifies the client cert and forwards it via `X-SSL-Client-Cert`. The IDP matches the SHA-1 thumbprint against the registered `certThumbprint`.
+### mTLS
 
 ```bash
-# Dev mode — cert in body (no Nginx required)
 curl -s -X POST http://localhost:3000/auth/token/mtls \
   -H "Content-Type: application/json" \
   -d '{"client_cert_pem": "-----BEGIN CERTIFICATE-----\n..."}' | jq
 ```
 
-Register apps for either flow via `POST /api/v1/admin/applications` with `"protocol": "jwt"` and either `publicKey` (assertion) or `certThumbprint` (mTLS) in the `jwt` config block.
+---
+
+## MFA
+
+| Endpoint | Auth | Purpose |
+|---|---|---|
+| `GET /auth/mfa/status` | Session | Check MFA enrollment status |
+| `POST /auth/mfa/totp/setup` | Session | Generate TOTP secret + otpauth URI |
+| `POST /auth/mfa/totp/verify` | Session | Verify first code and activate MFA |
+| `POST /auth/mfa/totp/validate` | Session | Validate a code during login |
+| `POST /auth/mfa/backup-codes/generate` | Session | Generate 10 single-use backup codes |
+| `POST /auth/mfa/backup-codes/use` | Session | Consume a backup code during login |
+
+TOTP secrets are encrypted at rest using the same AES-256-GCM key encryption service as signing keys. Backup codes are hashed with Argon2id — plaintext shown once only.
+
+Generate TOTP codes for testing (run from `apps/api`):
+
+```bash
+node -e "const s=require('speakeasy'); console.log(s.totp({secret:'YOUR_SECRET',encoding:'base32'}))"
+```
 
 ---
 
@@ -334,11 +346,12 @@ auth-idp/apps/api/src/
     ├── applications/    # M05 — App registry, SAML/OIDC/JWT config, credentials
     ├── oidc/            # M06 — oidc-provider, Redis adapter, interactions
     ├── saml/            # M07 — IDP metadata, SSO, SLO, samlify, assertions
-    └── jwt/             # M08 — RFC 7523 client assertions, mTLS, token issuance
-        ├── domain/      # AccessToken value object
-        ├── application/ # HandleJwtAssertion, HandleMtlsToken
-        ├── infrastructure/ # JoseJwtAssertionVerifier, JoseAccessTokenIssuer, ForgeCertThumbprintExtractor
-        └── interface/   # JwtAuthRoutes
+    ├── jwt/             # M08 — RFC 7523 client assertions, mTLS, token issuance
+    └── mfa/             # M09 — TOTP (speakeasy), backup codes (Argon2id)
+        ├── domain/      # MfaStatus, TotpSecret
+        ├── application/ # SetupTotp, VerifyTotpSetup, ValidateTotp, BackupCodes, GetMfaStatus
+        ├── infrastructure/ # OtplibTotpService (speakeasy), Argon2BackupCodeService, SupabaseMfaRepository
+        └── interface/   # MfaRoutes
 ```
 
 ---
@@ -355,8 +368,8 @@ auth-idp/apps/api/src/
 | M06 | OIDC / OAuth 2.0 — oidc-provider, Redis adapter, PKCE, interactions | ✅ Complete |
 | M07 | SAML 2.0 — IDP metadata, SSO flow, signed assertions, SLO | ✅ Complete |
 | M08 | JWT / cert auth — RFC 7523 client assertions, mTLS, token issuance | ✅ Complete |
-| M09 | MFA — TOTP, WebAuthn, backup codes | 🔜 Next |
-| M10 | Session management — SSO sessions, single logout | ⏳ Pending |
+| M09 | MFA — TOTP (speakeasy), Argon2id backup codes, enrollment flow | ✅ Complete |
+| M10 | Session management — SSO sessions, cross-app single logout | 🔜 Next |
 | M11 | Audit logging — MongoDB event store, BullMQ | ⏳ Pending |
 | M12 | Admin dashboard — Next.js UI | ⏳ Pending |
 
@@ -380,6 +393,7 @@ auth-idp/apps/api/src/
 | JWT signing | jose | JWK export, SPKI import, SignJWT |
 | Key crypto | Node.js crypto (built-in) | RSA/EC generation, AES-256-GCM |
 | Cert handling | node-forge | X.509 cert generation, thumbprint extraction |
+| TOTP | speakeasy | TOTP generation and verification |
 
 ---
 
@@ -393,10 +407,11 @@ auth-idp/apps/api/src/
 | `401` on admin routes | Exact `ADMIN_API_KEY` — no quotes, no spaces |
 | `409` on key generate | Key exists — use `/rotate` |
 | SP rejects SAML assertion | Import IDP cert from `/saml/:id/metadata` into SP trusted certs |
-| SAML login session expired | 30-min nonce TTL — restart the flow from the SP |
 | `invalid_client` on OIDC token | Wrong `client_secret` or PKCE verifier mismatch |
 | JWT assertion `UNAUTHORIZED` | `client_id` must be the app UUID, not the slug |
-| mTLS thumbprint mismatch | Strip with `sed 's/.*Fingerprint=//;s/://g'` and verify no prefix stored |
+| mTLS thumbprint mismatch | Strip with `sed 's/.*Fingerprint=//;s/://g'` — no prefix, lowercase |
+| TOTP always invalid | Clock skew — generate and submit within the same 30s window |
+| MFA backup codes column error | Run the ALTER TABLE migration in Supabase SQL Editor first |
 
 ---
 

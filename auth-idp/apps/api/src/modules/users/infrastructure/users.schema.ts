@@ -37,6 +37,10 @@ export const users = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
+    mfaEnabled:   boolean('mfa_enabled').notNull().default(false),
+    totpSecret:   text('totp_secret'),
+    totpPending:  boolean('totp_pending').notNull().default(false),
+    backupCodes: text('backup_codes').array().notNull()
   },
   (t) => ({
     emailIdx: uniqueIndex('users_email_idx').on(t.email),

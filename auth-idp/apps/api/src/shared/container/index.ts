@@ -4,6 +4,15 @@ import { getRedisClient } from '../../infrastructure/cache/redis.client.js'
 import { getMongoDb } from '../../infrastructure/mongo/mongo.client.js'
 import { createLogger, Logger } from '../logger/logger.js'
 import { getConfig } from '../config/env.js'
+import { SetupTotpUseCase } from '../../modules/mfa/application/use-cases/SetupTotp.js'
+import { VerifyTotpSetupUseCase } from '../../modules/mfa/application/use-cases/VerifyTotpSetup.js'
+import { ValidateTotpUseCase } from '../../modules/mfa/application/use-cases/ValidateTotp.js'
+import { GenerateBackupCodesUseCase } from '../../modules/mfa/application/use-cases/GenerateBackupCodes.js'
+import { UseBackupCodeUseCase } from '../../modules/mfa/application/use-cases/UseBackupCode.js'
+import { GetMfaStatusUseCase } from '../../modules/mfa/application/use-cases/GetMfaStatus.js'
+import { OtplibTotpService } from '../../modules/mfa/infrastructure/OtplibTotpService.js'
+import { Argon2BackupCodeService } from '../../modules/mfa/infrastructure/Argon2BackupCodeService.js'
+import { SupabaseMfaRepository } from '../../modules/mfa/infrastructure/SupabaseMfaRepository.js'
 
 import { GetIdpMetadataUseCase } from '../../modules/saml/application/use-cases/GetIdpMetadata.js'
 import { HandleSsoRequestUseCase } from '../../modules/saml/application/use-cases/HandleSsoRequest.js'
@@ -41,6 +50,7 @@ import type { GetApplicationUseCase, ListApplicationsUseCase, UpdateApplicationU
 import type { ISamlIdpService } from '../../modules/saml/application/ports/ISamlIdpService.js'
 import type { ISamlCertificateService } from '../../modules/saml/application/ports/ISamlCertificateService.js'
 import type { ISamlStateStore } from '../../modules/saml/application/ports/ISamlStateStore.js'
+
 
 
 export interface Cradle {
@@ -84,6 +94,16 @@ export interface Cradle {
   jwtAssertionVerifier: JoseJwtAssertionVerifier
   accessTokenIssuer: JoseAccessTokenIssuer
   certThumbprintExtractor: ForgeCertThumbprintExtractor
+  //MFA
+  mfaRepository: SupabaseMfaRepository
+  totpService: OtplibTotpService
+  backupCodeService: Argon2BackupCodeService
+  setupTotpUseCase: SetupTotpUseCase
+  verifyTotpSetupUseCase: VerifyTotpSetupUseCase
+  validateTotpUseCase: ValidateTotpUseCase
+  generateBackupCodesUseCase: GenerateBackupCodesUseCase
+  useBackupCodeUseCase: UseBackupCodeUseCase
+  getMfaStatusUseCase: GetMfaStatusUseCase
 }
 
 export type AppContainer = AwilixContainer<Cradle>
@@ -117,6 +137,18 @@ export function buildContainer(): AppContainer {
     certThumbprintExtractor:   asClass(ForgeCertThumbprintExtractor).singleton(),
     handleJwtAssertionUseCase: asClass(HandleJwtAssertionUseCase).scoped(),
     handleMtlsTokenUseCase:    asClass(HandleMtlsTokenUseCase).scoped(),
+  })
+
+  container.register({
+    mfaRepository:             asClass(SupabaseMfaRepository).scoped(),
+    totpService:               asClass(OtplibTotpService).singleton(),
+    backupCodeService:         asClass(Argon2BackupCodeService).singleton(),
+    setupTotpUseCase:          asClass(SetupTotpUseCase).scoped(),
+    verifyTotpSetupUseCase:    asClass(VerifyTotpSetupUseCase).scoped(),
+    validateTotpUseCase:       asClass(ValidateTotpUseCase).scoped(),
+    generateBackupCodesUseCase: asClass(GenerateBackupCodesUseCase).scoped(),
+    useBackupCodeUseCase:      asClass(UseBackupCodeUseCase).scoped(),
+    getMfaStatusUseCase:       asClass(GetMfaStatusUseCase).scoped(),
   })
 
   return container

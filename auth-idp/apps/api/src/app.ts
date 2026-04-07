@@ -17,6 +17,7 @@ import { registerOidcModule } from './modules/oidc/index.js'
 import { registerSamlModule } from './modules/saml/index.js'
 import { registerJwtAuthModule } from './modules/jwt/index.js'
 import fastifyFormBody from '@fastify/formbody'
+import { registerMfaModule } from './modules/mfa/index.js'
 
 const logger = createLogger('app')
 
@@ -57,6 +58,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registerOidcModule(app, container) 
   await registerSamlModule(app)
   await registerJwtAuthModule(app)
+  await registerMfaModule(app)
   app.decorate('container', container)
 
   app.addHook('onRequest', async (request: FastifyRequest) => {
