@@ -22,6 +22,7 @@ Built with Node.js, TypeScript, Fastify, Supabase (Postgres), Redis Cloud, and M
 - [Application Registry](#application-registry)
 - [OIDC / OAuth 2.0](#oidc--oauth-20)
 - [SAML 2.0](#saml-20)
+- [JWT / Certificate Auth](#jwt--certificate-auth)
 - [Project Structure](#project-structure)
 - [Module Status](#module-status)
 - [Tech Stack](#tech-stack)
@@ -55,7 +56,7 @@ Every external system is behind an interface. Swap any adapter by changing one r
 node --version   # must be >= 20
 ```
 
-Install via [nvm](https://github.com/nvm-sh/nvm) (recommended):
+Install via [nvm](https://github.com/nvm-sh/nvm):
 
 ```bash
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
@@ -72,7 +73,7 @@ pnpm --version   # must be >= 9
 ### 3. Install jq
 
 ```bash
-brew install jq        # macOS
+brew install jq          # macOS
 sudo apt-get install jq  # Ubuntu
 ```
 
@@ -108,7 +109,7 @@ git clone <repo>
 cd auth-idp
 pnpm install
 cp apps/api/.env.example apps/api/.env
-# fill in .env — see Environment Configuration below
+# fill in .env
 ```
 
 ---
@@ -116,23 +117,17 @@ cp apps/api/.env.example apps/api/.env
 ## Environment Configuration
 
 ```env
-# Server
 NODE_ENV=development
 PORT=3000
 LOG_LEVEL=info
 IDP_BASE_URL=http://localhost:3000
 
-# Database
 DATABASE_URL=postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres
 DATABASE_URL_DIRECT=postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:5432/postgres
 
-# Redis
 REDIS_URL=rediss://:[password]@[host]:[port]
-
-# MongoDB
 MONGODB_URI=mongodb+srv://[user]:[password]@[cluster].mongodb.net/auth_idp
 
-# Secrets
 ADMIN_API_KEY=        # generate below
 COOKIE_SECRET=        # generate below
 KEY_ENCRYPTION_SECRET=  # generate below
@@ -163,6 +158,7 @@ INFO: MongoDB connected
 INFO: Signing key bootstrapped
 INFO: OIDC provider mounted
 INFO: SAML 2.0 module registered
+INFO: JWT / cert auth module registered
 INFO: Server listening on port 3000
 ```
 
@@ -220,152 +216,99 @@ curl -s -X POST http://localhost:3000/auth/logout \
 | `applications` | Registered SPs — SAML, OIDC, JWT |
 | `saml_configs` | Per-app SAML config — entityId, ACS URL, attributeMappings |
 | `oidc_clients` | Per-app OIDC config — clientId, redirect URIs, grant types |
-| `jwt_configs` | Per-app JWT config — public key, audience, token lifetime |
+| `jwt_configs` | Per-app JWT config — public key, certThumbprint, audience |
 | `sso_sessions` | Active SSO sessions (M10) |
 | `audit_logs` | Immutable audit trail (M11) |
 
 ### Schema Change Workflow
 
-Drizzle Kit generates SQL diffs — apply manually via Supabase SQL Editor:
-
 ```bash
 cd apps/api
 pnpm drizzle-kit generate
-# Copy generated SQL from drizzle/migrations/
-# Paste into Supabase → SQL Editor → Run
+# Copy generated SQL → Supabase SQL Editor → Run
 ```
 
 ---
 
 ## Key Management
 
-### Endpoints
-
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
 | `POST` | `/api/v1/admin/keys/generate` | Admin | Generate new RSA key pair |
-| `POST` | `/api/v1/admin/keys/rotate` | Admin | Rotate active key (old key → retired) |
-| `GET` | `/.well-known/jwks.json` | Public | JWKS — public keys for token verification |
+| `POST` | `/api/v1/admin/keys/rotate` | Admin | Rotate active key |
+| `GET` | `/.well-known/jwks.json` | Public | JWKS public keys |
 
-Keys are auto-bootstrapped at startup — no manual generation needed for development.
-
-Retired keys stay in JWKS until all tokens signed with them expire. Never delete a key while tokens signed by it exist in the wild.
-
-Supported algorithms: `RS256` (default), `RS384`, `RS512`, `ES256`, `ES384`, `ES512`
+Keys are auto-bootstrapped at startup. Retired keys stay in JWKS until all tokens signed with them expire.
 
 ---
 
 ## Application Registry
-
-### Endpoints
 
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
 | `POST` | `/api/v1/admin/applications` | Admin | Register SAML / OIDC / JWT app |
 | `GET` | `/api/v1/admin/applications` | Admin | List all apps |
 | `GET` | `/api/v1/admin/applications/:id` | Admin | Get app with protocol config |
-| `PATCH` | `/api/v1/admin/applications/:id` | Admin | Update name, logo, status |
-
-### Register a SAML app
-
-```bash
-curl -s -X POST http://localhost:3000/api/v1/admin/applications \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $ADMIN_KEY" \
-  -d '{
-    "name": "My SAML App",
-    "protocol": "saml",
-    "saml": {
-      "entityId": "https://sp.example.com",
-      "acsUrl": "https://sp.example.com/acs",
-      "sloUrl": "https://sp.example.com/slo",
-      "nameIdFormat": "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress",
-      "signAssertions": true,
-      "attributeMappings": {
-        "email": "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress",
-        "given_name": "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname",
-        "family_name": "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname"
-      }
-    }
-  }' | jq
-```
-
-### Register an OIDC app
-
-```bash
-curl -s -X POST http://localhost:3000/api/v1/admin/applications \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $ADMIN_KEY" \
-  -d '{
-    "name": "My OIDC App",
-    "protocol": "oidc",
-    "oidc": {
-      "redirectUris": ["https://oauthdebugger.com/debug"],
-      "grantTypes": ["authorization_code"],
-      "scopes": ["openid","email","profile"]
-    }
-  }' | jq
-```
-
-**Store `clientSecret` immediately — it is never shown again.**
+| `PATCH` | `/api/v1/admin/applications/:id` | Admin | Update app |
 
 ---
 
 ## OIDC / OAuth 2.0
 
-### Discovery
+| Endpoint | Purpose |
+|---|---|
+| `GET /.well-known/openid-configuration` | Discovery document |
+| `GET /oidc/jwks` | JWKS |
+| `GET /oidc/auth` | Authorization endpoint |
+| `POST /oidc/token` | Token endpoint |
+| `GET /oidc/userinfo` | User info |
+| `POST /oidc/introspect` | Token introspection |
+| `POST /oidc/revoke` | Token revocation |
+| `GET /oidc/end_session` | Logout |
 
-```bash
-curl http://localhost:3000/.well-known/openid-configuration | jq
-```
-
-### JWKS
-
-```bash
-curl http://localhost:3000/oidc/jwks | jq
-```
-
-### Authorization flow
-
-Start with `GET /oidc/auth?client_id=...&redirect_uri=...&response_type=code&scope=openid email profile&code_challenge=...&code_challenge_method=S256`
-
-Use [oauthdebugger.com](https://oauthdebugger.com) to generate a PKCE code challenge and run the full flow interactively.
-
-### Token exchange
-
-```bash
-curl -s -X POST http://localhost:3000/oidc/token \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -u "CLIENT_ID:CLIENT_SECRET" \
-  -d "grant_type=authorization_code&code=AUTH_CODE&redirect_uri=REDIRECT_URI&code_verifier=PKCE_VERIFIER" | jq
-```
+Use [oauthdebugger.com](https://oauthdebugger.com) to run the full PKCE authorization code flow interactively.
 
 ---
 
 ## SAML 2.0
 
-### IDP Metadata
+| Endpoint | Purpose |
+|---|---|
+| `GET /saml/:appId/metadata` | IDP metadata XML — give this URL to the SP |
+| `POST /saml/:appId/sso` | SSO entry point — receives AuthnRequest |
+| `POST /saml/:appId/sso/login` | Credential submit during SSO |
+| `POST /saml/:appId/slo` | Single Logout — receives LogoutRequest |
+
+Assertions are signed with the active M03 RSA key. Attribute mappings convert user profile fields to SP-specific attribute name URIs configured per-app.
+
+---
+
+## JWT / Certificate Auth
+
+### RFC 7523 — Client Assertion
+
+The M2M client signs a short-lived JWT with its own private key. The IDP verifies against the registered public key and issues an access token. No secret ever crosses the wire.
 
 ```bash
-curl -s http://localhost:3000/saml/$APP_ID/metadata
+curl -s -X POST http://localhost:3000/auth/token/jwt-assertion \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  --data-urlencode "client_id=APP_ID" \
+  --data-urlencode "client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer" \
+  --data-urlencode "client_assertion=SIGNED_JWT" | jq
 ```
 
-Give this URL to the SP so it can import the IDP configuration. The metadata includes the signing certificate, SSO endpoint, and SLO endpoint.
+### mTLS — Certificate Auth
 
-### SP-initiated SSO flow
+The reverse proxy verifies the client cert and forwards it via `X-SSL-Client-Cert`. The IDP matches the SHA-1 thumbprint against the registered `certThumbprint`.
 
-1. SP generates an `AuthnRequest` and POSTs it to `POST /saml/:appId/sso`
-2. If no IDP session exists, the user sees an inline login page
-3. After successful login, the IDP POSTs a signed SAML Response to the SP's ACS URL
-4. The SP validates the response and logs the user in
+```bash
+# Dev mode — cert in body (no Nginx required)
+curl -s -X POST http://localhost:3000/auth/token/mtls \
+  -H "Content-Type: application/json" \
+  -d '{"client_cert_pem": "-----BEGIN CERTIFICATE-----\n..."}' | jq
+```
 
-### Single Logout
-
-SP sends a `LogoutRequest` to `POST /saml/:appId/slo`. The IDP terminates the session and POSTs a `LogoutResponse` back to the SP's SLO URL.
-
-### Attribute mappings
-
-Configured per-app in `samlConfig.attributeMappings`. Keys are internal claim names (`email`, `given_name`, `family_name`, `name`, `locale`); values are the SP-specific attribute name URIs.
+Register apps for either flow via `POST /api/v1/admin/applications` with `"protocol": "jwt"` and either `publicKey` (assertion) or `certThumbprint` (mTLS) in the `jwt` config block.
 
 ---
 
@@ -390,11 +333,12 @@ auth-idp/apps/api/src/
     ├── users/           # M04 — Registration, login, Argon2id, sessions, profiles
     ├── applications/    # M05 — App registry, SAML/OIDC/JWT config, credentials
     ├── oidc/            # M06 — oidc-provider, Redis adapter, interactions
-    └── saml/            # M07 — IDP metadata, SSO, SLO, samlify, assertions
-        ├── domain/      # SamlAssertion value object
-        ├── application/ # GetIdpMetadata, HandleSsoRequest, HandleSloRequest
-        ├── infrastructure/ # SamlifyIdpService, ForgeSamlCertificateService, RedisSamlStateStore
-        └── interface/   # SamlRoutes — metadata, sso, sso/login, slo
+    ├── saml/            # M07 — IDP metadata, SSO, SLO, samlify, assertions
+    └── jwt/             # M08 — RFC 7523 client assertions, mTLS, token issuance
+        ├── domain/      # AccessToken value object
+        ├── application/ # HandleJwtAssertion, HandleMtlsToken
+        ├── infrastructure/ # JoseJwtAssertionVerifier, JoseAccessTokenIssuer, ForgeCertThumbprintExtractor
+        └── interface/   # JwtAuthRoutes
 ```
 
 ---
@@ -410,8 +354,8 @@ auth-idp/apps/api/src/
 | M05 | Application registry — SAML/OIDC/JWT config, slug, credentials | ✅ Complete |
 | M06 | OIDC / OAuth 2.0 — oidc-provider, Redis adapter, PKCE, interactions | ✅ Complete |
 | M07 | SAML 2.0 — IDP metadata, SSO flow, signed assertions, SLO | ✅ Complete |
-| M08 | JWT / cert auth — client assertions RFC 7523, mTLS | 🔜 Next |
-| M09 | MFA — TOTP, WebAuthn, backup codes | ⏳ Pending |
+| M08 | JWT / cert auth — RFC 7523 client assertions, mTLS, token issuance | ✅ Complete |
+| M09 | MFA — TOTP, WebAuthn, backup codes | 🔜 Next |
 | M10 | Session management — SSO sessions, single logout | ⏳ Pending |
 | M11 | Audit logging — MongoDB event store, BullMQ | ⏳ Pending |
 | M12 | Admin dashboard — Next.js UI | ⏳ Pending |
@@ -433,8 +377,9 @@ auth-idp/apps/api/src/
 | Password hashing | Argon2id | OWASP-recommended parameters |
 | OIDC / OAuth 2.0 | oidc-provider | Full spec compliance |
 | SAML 2.0 | samlify + node-forge | IDP metadata, SSO, SLO, signed assertions |
-| JWT signing | jose | JWK export, SPKI import |
+| JWT signing | jose | JWK export, SPKI import, SignJWT |
 | Key crypto | Node.js crypto (built-in) | RSA/EC generation, AES-256-GCM |
+| Cert handling | node-forge | X.509 cert generation, thumbprint extraction |
 
 ---
 
@@ -442,16 +387,16 @@ auth-idp/apps/api/src/
 
 | Error | Fix |
 |---|---|
-| `❌ Invalid environment variables` | All vars in `.env` must be set — no empty values |
+| `Invalid environment variables` | All vars in `.env` must be set |
 | `Redis max retries reached` | Use `rediss://` (double s) from Redis Cloud |
 | `MongoDB not connected` | Check Atlas Network Access — add your IP |
-| `401` on admin routes | Exact `ADMIN_API_KEY` value — no quotes, no spaces |
-| `409` on key generate | Key already exists — use `/rotate` |
-| `Startup failed: isOk is not a function` | `rm -rf node_modules/.cache` and restart |
+| `401` on admin routes | Exact `ADMIN_API_KEY` — no quotes, no spaces |
+| `409` on key generate | Key exists — use `/rotate` |
 | SP rejects SAML assertion | Import IDP cert from `/saml/:id/metadata` into SP trusted certs |
-| SAML login session expired | 30-minute nonce TTL — restart the flow from the SP |
+| SAML login session expired | 30-min nonce TTL — restart the flow from the SP |
 | `invalid_client` on OIDC token | Wrong `client_secret` or PKCE verifier mismatch |
-| `redirect_uri_mismatch` | Redirect URI must exactly match what was registered in M05 |
+| JWT assertion `UNAUTHORIZED` | `client_id` must be the app UUID, not the slug |
+| mTLS thumbprint mismatch | Strip with `sed 's/.*Fingerprint=//;s/://g'` and verify no prefix stored |
 
 ---
 

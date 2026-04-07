@@ -11,6 +11,11 @@ import { HandleSloRequestUseCase } from '../../modules/saml/application/use-case
 import { SamlifyIdpService } from '../../modules/saml/infrastructure/SamlifyIdpService.js'
 import { ForgeSamlCertificateService } from '../../modules/saml/infrastructure/ForgeSamlCertificateService.js'
 import { RedisSamlStateStore } from '../../modules/saml/infrastructure/RedisSamlStateStore.js'
+import { HandleJwtAssertionUseCase } from '../../modules/jwt/application/use-cases/HandleJwtAssertion.js'
+import { HandleMtlsTokenUseCase } from '../../modules/jwt/application/use-cases/HandleMtlsToken.js'
+import { JoseJwtAssertionVerifier } from '../../modules/jwt/infrastructure/JoseJwtAssertionVerifier.js'
+import { JoseAccessTokenIssuer } from '../../modules/jwt/infrastructure/JoseAccessTokenIssuer.js'
+import { ForgeCertThumbprintExtractor } from '../../modules/jwt/infrastructure/ForgeCertThumbprintExtractor.js'
 
 import type { Env } from '../config/env.js'
 import type { Db } from 'mongodb'
@@ -36,6 +41,7 @@ import type { GetApplicationUseCase, ListApplicationsUseCase, UpdateApplicationU
 import type { ISamlIdpService } from '../../modules/saml/application/ports/ISamlIdpService.js'
 import type { ISamlCertificateService } from '../../modules/saml/application/ports/ISamlCertificateService.js'
 import type { ISamlStateStore } from '../../modules/saml/application/ports/ISamlStateStore.js'
+
 
 export interface Cradle {
   db: DrizzleClient
@@ -73,6 +79,11 @@ export interface Cradle {
   samlIdpService: ISamlIdpService
   samlCertificateService: ISamlCertificateService
   samlStateStore: ISamlStateStore
+  handleJwtAssertionUseCase: HandleJwtAssertionUseCase
+  handleMtlsTokenUseCase: HandleMtlsTokenUseCase
+  jwtAssertionVerifier: JoseJwtAssertionVerifier
+  accessTokenIssuer: JoseAccessTokenIssuer
+  certThumbprintExtractor: ForgeCertThumbprintExtractor
 }
 
 export type AppContainer = AwilixContainer<Cradle>
@@ -98,6 +109,14 @@ export function buildContainer(): AppContainer {
     getIdpMetadataUseCase:  asClass(GetIdpMetadataUseCase).scoped(),
     handleSsoRequestUseCase: asClass(HandleSsoRequestUseCase).scoped(),
     handleSloRequestUseCase: asClass(HandleSloRequestUseCase).scoped(),
+  })
+
+  container.register({
+    jwtAssertionVerifier:      asClass(JoseJwtAssertionVerifier).singleton(),
+    accessTokenIssuer:         asClass(JoseAccessTokenIssuer).singleton(),
+    certThumbprintExtractor:   asClass(ForgeCertThumbprintExtractor).singleton(),
+    handleJwtAssertionUseCase: asClass(HandleJwtAssertionUseCase).scoped(),
+    handleMtlsTokenUseCase:    asClass(HandleMtlsTokenUseCase).scoped(),
   })
 
   return container

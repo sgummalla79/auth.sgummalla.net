@@ -48,4 +48,5 @@ export interface IApplicationRepository {
   saveOidcClient(input: CreateOidcClientInput): Promise<Result<OidcClient, DatabaseError>>
   saveJwtConfig(input: CreateJwtConfigInput): Promise<Result<JwtConfig, DatabaseError>>
   findOidcClientByClientId(clientId: string): Promise<Result<OidcClient, NotFoundError | DatabaseError>>
+  findByThumbprint(thumbprint: string): Promise<Result<ApplicationWithConfig, NotFoundError | DatabaseError>>
 }

@@ -163,6 +163,25 @@ export class SupabaseApplicationRepository implements IApplicationRepository {
     } catch (e) { return err(new DatabaseError(`Failed to find OIDC client: ${clientId}`, e)) }
   }
 
+  async findByThumbprint(thumbprint: string): Promise<Result<ApplicationWithConfig, NotFoundError | DatabaseError>> {
+    try {
+      const jwtRow = await this.db
+        .select()
+        .from(jwtConfigs)
+        .where(eq(jwtConfigs.certThumbprint, thumbprint))
+        .limit(1)
+        .then(rows => rows[0])
+
+      if (!jwtRow) {
+        return err(new NotFoundError(`No application found for thumbprint: ${thumbprint}`))
+      }
+
+      return this.findWithConfig(jwtRow.applicationId)
+    } catch (e) {
+      return err(new DatabaseError('Failed to find application by thumbprint', e))
+    }
+  }
+
   private toDomain(row: AppRow): Application {
     return new Application(row.id, row.name, row.slug, row.protocol,
       row.status, row.logoUrl, row.description, row.createdAt, row.updatedAt)

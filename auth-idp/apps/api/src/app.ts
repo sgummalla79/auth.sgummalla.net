@@ -15,6 +15,7 @@ import { registerUserModule, registerUserRoutes } from './modules/users/index.js
 import { registerApplicationModule, registerApplicationRoutes } from './modules/applications/index.js'
 import { registerOidcModule } from './modules/oidc/index.js'
 import { registerSamlModule } from './modules/saml/index.js'
+import { registerJwtAuthModule } from './modules/jwt/index.js'
 import fastifyFormBody from '@fastify/formbody'
 
 const logger = createLogger('app')
@@ -55,6 +56,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   registerApplicationModule(container)
   await registerOidcModule(app, container) 
   await registerSamlModule(app)
+  await registerJwtAuthModule(app)
   app.decorate('container', container)
 
   app.addHook('onRequest', async (request: FastifyRequest) => {
