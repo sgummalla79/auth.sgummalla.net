@@ -19,6 +19,7 @@ import { registerJwtAuthModule } from './modules/jwt/index.js'
 import fastifyFormBody from '@fastify/formbody'
 import { registerMfaModule } from './modules/mfa/index.js'
 import { registerSessionModule } from './modules/sessions/index.js'
+import { registerAuditModule } from './modules/audit/index.js'
 
 const logger = createLogger('app')
 
@@ -61,6 +62,9 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registerJwtAuthModule(app)
   await registerMfaModule(app)
   await registerSessionModule(app)
+  const auditRepository = container.cradle.auditRepository
+  const auditWorker = container.cradle.auditWorker
+  await registerAuditModule(app, auditRepository, auditWorker)
   app.decorate('container', container)
 
   app.addHook('onRequest', async (request: FastifyRequest) => {

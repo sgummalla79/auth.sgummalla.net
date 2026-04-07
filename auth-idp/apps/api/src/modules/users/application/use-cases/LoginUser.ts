@@ -7,6 +7,7 @@ import type { Logger } from '../../../../shared/logger/logger.js'
 import type { IUserRepository } from '../ports/IUserRepository.js'
 import type { IHashService } from '../ports/IHashService.js'
 import type { ISessionStore } from '../ports/ISessionStore.js'
+import type { IAuditLogger } from '../../../audit/application/ports/IAuditLogger.js'
 
 const MAX_FAILED_ATTEMPTS = 5
 const LOCKOUT_MINUTES = 15
@@ -27,6 +28,7 @@ interface Deps {
   userRepository: IUserRepository
   hashService: IHashService
   sessionStore: ISessionStore
+  auditLogger: IAuditLogger
   logger: Logger
 }
 
@@ -35,12 +37,14 @@ export class LoginUserUseCase {
   private readonly hash: IHashService
   private readonly sessions: ISessionStore
   private readonly logger: Logger
+  private readonly auditLogger: IAuditLogger
 
-  constructor({ userRepository, hashService, sessionStore, logger }: Deps) {
+  constructor({ userRepository, hashService, sessionStore, logger, auditLogger }: Deps) {
     this.repo = userRepository
     this.hash = hashService
     this.sessions = sessionStore
     this.logger = logger
+    this.auditLogger = auditLogger
   }
 
   async execute(cmd: unknown): Promise<Result<LoginResult, AppError>> {
@@ -77,6 +81,13 @@ export class LoginUserUseCase {
         lockUntil.setMinutes(lockUntil.getMinutes() + LOCKOUT_MINUTES)
         await this.repo.lockAccount(user.id, lockUntil)
       }
+
+      void this.auditLogger.log({
+        type: 'user.login.failure',
+        outcome: 'failure',
+        metadata: { email, reason: 'invalid_credentials' },
+      })
+
       return err(new UnauthorizedError('Invalid email or password'))
     }
 
@@ -89,6 +100,15 @@ export class LoginUserUseCase {
     const expiresAt = new Date(Date.now() + SESSION_TTL_SECONDS * 1000)
 
     this.logger.info({ userId: user.id, email }, 'User logged in')
+
+    // Fire-and-forget — don't await, don't block login
+    void this.auditLogger.log({
+      type: 'user.login.success',
+      outcome: 'success',
+      userId: user.id,
+      metadata: { email },
+    })
+
     return ok({ sessionToken: sessionResult.value, userId: user.id, email, expiresAt })
   }
 }

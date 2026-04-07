@@ -25,6 +25,7 @@ Built with Node.js, TypeScript, Fastify, Supabase (Postgres), Redis Cloud, and M
 - [JWT / Certificate Auth](#jwt--certificate-auth)
 - [MFA](#mfa)
 - [Session Management](#session-management)
+- [Audit Logging](#audit-logging)
 - [Project Structure](#project-structure)
 - [Module Status](#module-status)
 - [Tech Stack](#tech-stack)
@@ -163,6 +164,7 @@ INFO: SAML 2.0 module registered
 INFO: JWT / cert auth module registered
 INFO: MFA module registered
 INFO: Session management module registered
+INFO: Audit logging module registered
 INFO: Server listening on port 3000
 ```
 
@@ -220,7 +222,7 @@ curl -s -X POST http://localhost:3000/auth/logout \
 | `oidc_clients` | Per-app OIDC config — clientId, redirect URIs, grant types |
 | `jwt_configs` | Per-app JWT config — public key, certThumbprint, audience |
 | `sso_sessions` | Active SSO sessions — status, participating apps, expiry |
-| `audit_logs` | Immutable audit trail (M11) |
+| `audit_logs` | Immutable audit trail — MongoDB Atlas, 90-day TTL |
 
 ### Schema Change Workflow
 
@@ -329,9 +331,35 @@ node -e "const s=require('speakeasy'); console.log(s.totp({secret:'YOUR_SECRET',
 | `GET /auth/sessions` | Session | List active SSO sessions |
 | `DELETE /auth/sessions/:id` | Session | Revoke a specific session |
 | `DELETE /auth/sessions` | Session | Revoke all sessions (global logout) |
-| `POST /api/v1/admin/sessions/revoke/:userId` | Admin | Force-logout a user |
+| `POST /api/v1/admin/sessions/revoke/:userId` | Admin | Force-logout a user (userId must be UUID) |
 
-SSO sessions are created automatically when users authenticate via SAML. On logout, the IDP fans out SAML LogoutRequests to all participating SPs. The `userId` in admin endpoints must be a valid UUID.
+---
+
+## Audit Logging
+
+| Endpoint | Auth | Purpose |
+|---|---|---|
+| `GET /api/v1/admin/audit` | Admin | Query audit events |
+| `GET /api/v1/admin/audit/:eventId` | Admin | Get a specific event |
+
+### Query parameters
+
+| Parameter | Type | Purpose |
+|---|---|---|
+| `userId` | UUID | Filter by user |
+| `appId` | UUID | Filter by application |
+| `type` | string | Filter by event type |
+| `outcome` | success \| failure | Filter by outcome |
+| `from` | ISO date | Start of date range |
+| `to` | ISO date | End of date range |
+| `limit` | number | Max results (default 50, max 200) |
+| `offset` | number | Pagination offset |
+
+### Event types
+
+`user.login.success` · `user.login.failure` · `user.logout` · `user.register` · `mfa.setup` · `mfa.activated` · `mfa.validated` · `mfa.validation.failure` · `mfa.backup_code.used` · `saml.sso.success` · `saml.sso.failure` · `saml.slo` · `oidc.token.issued` · `jwt.token.issued` · `key.rotated` · `session.revoked` · `session.revoked_all`
+
+Audit events are written asynchronously via BullMQ → MongoDB Atlas with a 90-day TTL.
 
 ---
 
@@ -359,11 +387,13 @@ auth-idp/apps/api/src/
     ├── saml/            # M07 — IDP metadata, SSO, SLO, samlify, assertions
     ├── jwt/             # M08 — RFC 7523 client assertions, mTLS, token issuance
     ├── mfa/             # M09 — TOTP (speakeasy), Argon2id backup codes
-    └── sessions/        # M10 — SSO session tracking, SLO fanout, admin revocation
-        ├── domain/      # SsoSession entity, ParticipatingApp
-        ├── application/ # CreateSsoSession, AddParticipatingApp, GetUserSessions, RevokeSession, RevokeAllSessions
-        ├── infrastructure/ # SupabaseSsoSessionRepository, HttpSloFanoutService
-        └── interface/   # SessionRoutes
+    ├── sessions/        # M10 — SSO session tracking, SLO fanout, admin revocation
+    └── audit/           # M11 — BullMQ queue, MongoDB persistence, admin query API
+        ├── domain/      # AuditEvent entity, AuditEventType
+        ├── application/ # QueryAuditEvents, GetAuditEvent, IAuditLogger, IAuditRepository
+        ├── infrastructure/ # MongoAuditRepository, BullmqAuditLogger
+        ├── worker/      # AuditWorker — BullMQ consumer
+        └── interface/   # AuditRoutes
 ```
 
 ---
@@ -382,8 +412,8 @@ auth-idp/apps/api/src/
 | M08 | JWT / cert auth — RFC 7523 client assertions, mTLS, token issuance | ✅ Complete |
 | M09 | MFA — TOTP (speakeasy), Argon2id backup codes, enrollment flow | ✅ Complete |
 | M10 | Session management — SSO session tracking, SLO fanout, admin revocation | ✅ Complete |
-| M11 | Audit logging — MongoDB event store, BullMQ | 🔜 Next |
-| M12 | Admin dashboard — Next.js UI | ⏳ Pending |
+| M11 | Audit logging — BullMQ queue, MongoDB event store, admin query API | ✅ Complete |
+| M12 | Admin dashboard — Next.js UI | 🔜 Next |
 
 ---
 
@@ -396,7 +426,8 @@ auth-idp/apps/api/src/
 | DI container | Awilix (PROXY mode) | Dependency injection |
 | Database | Supabase (Postgres) via Drizzle ORM | Application data |
 | Cache | Redis Cloud via ioredis | Sessions, tokens, rate limiting |
-| Document store | MongoDB Atlas | Audit logs (M11) |
+| Document store | MongoDB Atlas | Audit logs |
+| Job queue | BullMQ | Async audit event processing |
 | Validation | Zod | Env config + request schemas |
 | Logging | Pino + pino-pretty | Structured JSON logging |
 | Password hashing | Argon2id | OWASP-recommended parameters |
@@ -423,7 +454,9 @@ auth-idp/apps/api/src/
 | JWT assertion `UNAUTHORIZED` | `client_id` must be the app UUID, not the slug |
 | mTLS thumbprint mismatch | Strip with `sed 's/.*Fingerprint=//;s/://g'` — no prefix, lowercase |
 | TOTP always invalid | Clock skew — generate and submit within the same 30s window |
-| Session `DATABASE_ERROR` on admin revoke | `userId` must be a valid UUID, not a plain string |
+| Session `DATABASE_ERROR` on admin revoke | `userId` must be a valid UUID |
+| Audit events not appearing | BullMQ is async — wait 2s after action before querying |
+| BullMQ eviction warning | Set Redis eviction policy to `noeviction` in Redis Cloud settings |
 
 ---
 

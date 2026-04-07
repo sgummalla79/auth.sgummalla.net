@@ -31,6 +31,11 @@ import { RevokeSessionUseCase } from '../../modules/sessions/application/use-cas
 import { RevokeAllSessionsUseCase } from '../../modules/sessions/application/use-cases/RevokeAllSessions.js'
 import { SupabaseSsoSessionRepository } from '../../modules/sessions/infrastructure/SupabaseSsoSessionRepository.js'
 import { HttpSloFanoutService } from '../../modules/sessions/infrastructure/HttpSloFanoutService.js'
+import { MongoAuditRepository } from '../../modules/audit/infrastructure/MongoAuditRepository.js'
+import { BullmqAuditLogger } from '../../modules/audit/infrastructure/BullmqAuditLogger.js'
+import { AuditWorker } from '../../modules/audit/worker/AuditWorker.js'
+import { QueryAuditEventsUseCase } from '../../modules/audit/application/use-cases/QueryAuditEvents.js'
+import { GetAuditEventUseCase } from '../../modules/audit/application/use-cases/GetAuditEvent.js'
 
 import type { Env } from '../config/env.js'
 import type { Db } from 'mongodb'
@@ -118,6 +123,12 @@ export interface Cradle {
   getUserSessionsUseCase: GetUserSessionsUseCase
   revokeSessionUseCase: RevokeSessionUseCase
   revokeAllSessionsUseCase: RevokeAllSessionsUseCase
+  //Audit
+  auditRepository: MongoAuditRepository
+  auditLogger: BullmqAuditLogger
+  auditWorker: AuditWorker
+  queryAuditEventsUseCase: QueryAuditEventsUseCase
+  getAuditEventUseCase: GetAuditEventUseCase
 }
 
 export type AppContainer = AwilixContainer<Cradle>
@@ -173,6 +184,14 @@ export function buildContainer(): AppContainer {
     getUserSessionsUseCase:    asClass(GetUserSessionsUseCase).scoped(),
     revokeSessionUseCase:      asClass(RevokeSessionUseCase).scoped(),
     revokeAllSessionsUseCase:  asClass(RevokeAllSessionsUseCase).scoped(),
+  })
+
+  container.register({
+    auditRepository:          asClass(MongoAuditRepository).singleton(),
+    auditLogger:              asClass(BullmqAuditLogger).singleton(),
+    auditWorker:              asClass(AuditWorker).singleton(),
+    queryAuditEventsUseCase:  asClass(QueryAuditEventsUseCase).scoped(),
+    getAuditEventUseCase:     asClass(GetAuditEventUseCase).scoped(),
   })
 
   return container

@@ -8,6 +8,8 @@ import pino from 'pino'
 
 const logger = pino({ level: 'silent' })
 
+const mockAuditLogger = { log: vi.fn().mockResolvedValue(undefined) }
+
 function makeUser(): User {
   return new User(
     'user-123', 'test@example.com', false,
@@ -41,19 +43,19 @@ describe('RegisterUserUseCase', () => {
     mockRepo.findByEmail.mockResolvedValue(ok(makeUser()))
     const result = await useCase.execute({ email: 'existing@example.com', password: 'Password1' })
     expect(result.isErr()).toBe(true)
-    expect(result.error).toBeInstanceOf(ConflictError)
+    if (result.isErr()) expect(result.error).toBeInstanceOf(ConflictError)
   })
 
   it('rejects weak passwords', async () => {
     const result = await useCase.execute({ email: 'test@example.com', password: 'weak' })
     expect(result.isErr()).toBe(true)
-    expect(result.error!.code).toBe('VALIDATION_ERROR')
+    if (result.isErr()) expect(result.error.code).toBe('VALIDATION_ERROR')
   })
 
   it('rejects invalid email', async () => {
     const result = await useCase.execute({ email: 'not-an-email', password: 'Password1' })
     expect(result.isErr()).toBe(true)
-    expect(result.error!.code).toBe('VALIDATION_ERROR')
+    if (result.isErr()) expect(result.error.code).toBe('VALIDATION_ERROR')
   })
 
   it('lowercases email', async () => {
@@ -78,20 +80,26 @@ describe('LoginUserUseCase', () => {
     }
     mockHash = { verify: vi.fn().mockResolvedValue(ok(true)) }
     mockSessions = { create: vi.fn().mockResolvedValue(ok('session-token-abc')) }
-    useCase = new LoginUserUseCase({ userRepository: mockRepo, hashService: mockHash, sessionStore: mockSessions, logger })
+    useCase = new LoginUserUseCase({
+      userRepository: mockRepo,
+      hashService: mockHash,
+      sessionStore: mockSessions,
+      logger,
+      auditLogger: mockAuditLogger,
+    })
   })
 
   it('returns session token on valid credentials', async () => {
     const result = await useCase.execute({ email: 'test@example.com', password: 'Password1' })
     expect(result.isOk()).toBe(true)
-    expect(result.value!.sessionToken).toBe('session-token-abc')
+    if (result.isOk()) expect(result.value.sessionToken).toBe('session-token-abc')
   })
 
   it('returns unauthorized on wrong password', async () => {
     mockHash.verify.mockResolvedValue(ok(false))
     const result = await useCase.execute({ email: 'test@example.com', password: 'Wrong1' })
     expect(result.isErr()).toBe(true)
-    expect(result.error).toBeInstanceOf(UnauthorizedError)
+    if (result.isErr()) expect(result.error).toBeInstanceOf(UnauthorizedError)
     expect(mockRepo.incrementFailedLogins).toHaveBeenCalled()
   })
 
@@ -99,7 +107,7 @@ describe('LoginUserUseCase', () => {
     mockRepo.findByEmail.mockResolvedValue(err(new NotFoundError('not found')))
     const result = await useCase.execute({ email: 'unknown@example.com', password: 'Password1' })
     expect(result.isErr()).toBe(true)
-    expect(result.error).toBeInstanceOf(UnauthorizedError)
+    if (result.isErr()) expect(result.error).toBeInstanceOf(UnauthorizedError)
   })
 
   it('returns unauthorized for locked account', async () => {
@@ -109,7 +117,7 @@ describe('LoginUserUseCase', () => {
     mockRepo.findByEmail.mockResolvedValue(ok(lockedUser))
     const result = await useCase.execute({ email: 'test@example.com', password: 'Password1' })
     expect(result.isErr()).toBe(true)
-    expect(result.error!.message).toContain('locked')
+    if (result.isErr()) expect(result.error.message).toContain('locked')
   })
 
   it('locks account after 5 failed attempts', async () => {
