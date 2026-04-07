@@ -1,402 +1,50 @@
-# auth.sgummalla.net — Identity Provider (IDP)
+# auth.sgummalla.net
 
-A production-grade Identity Provider supporting **SAML 2.0**, **OAuth 2.0 / OIDC**, and **JWT / Certificate-based auth** for Single Sign-On (SSO).
+A custom Identity Provider (IDP) supporting SAML 2.0, OIDC/OAuth 2.0, and JWT certificate-based authentication — built for SSO across multiple applications.
 
-Built with Node.js, TypeScript, Fastify, Supabase (Postgres), Redis Cloud, and MongoDB Atlas.
+## Quick Start
 
----
-
-## Table of Contents
-
-- [Architecture](#architecture)
-- [Prerequisites](#prerequisites)
-- [External Services Setup](#external-services-setup)
-- [Project Setup](#project-setup)
-- [Environment Configuration](#environment-configuration)
-- [Generate Secrets](#generate-secrets)
-- [Running the Project](#running-the-project)
-- [Testing with cURL](#testing-with-curl)
-- [Database Schema](#database-schema)
-- [Schema Change Workflow](#schema-change-workflow)
-- [Key Management](#key-management)
-- [Application Registry](#application-registry)
-- [OIDC / OAuth 2.0](#oidc--oauth-20)
-- [SAML 2.0](#saml-20)
-- [JWT / Certificate Auth](#jwt--certificate-auth)
-- [MFA](#mfa)
-- [Session Management](#session-management)
-- [Audit Logging](#audit-logging)
-- [Project Structure](#project-structure)
-- [Module Status](#module-status)
-- [Tech Stack](#tech-stack)
-- [Troubleshooting](#troubleshooting)
-
----
+```bash
+git clone https://github.com/sgummalla79/auth.sgummalla.net.git
+cd auth.sgummalla.net/auth-idp
+pnpm install
+cp apps/api/.env.example apps/api/.env   # fill in all values
+pnpm dev                                  # starts API on :3000
+```
 
 ## Architecture
 
-Hexagonal architecture (Ports & Adapters) with strict layer separation:
-
 ```
-Domain → Application → Infrastructure → Interface
+auth-idp/
+├── apps/
+│   ├── api/                 # Fastify API — all IDP endpoints
+│   │   ├── src/
+│   │   │   ├── shared/      # Config, logger, DI container, Result type
+│   │   │   ├── infrastructure/  # Postgres, Redis, MongoDB clients
+│   │   │   └── modules/
+│   │   │       ├── keys/          # M03 — RSA/EC generation, AES encryption, JWKS, rotation
+│   │   │       ├── users/         # M04 — Registration, login, profiles, sessions
+│   │   │       ├── applications/  # M05 — App registry (SAML/OIDC/JWT)
+│   │   │       ├── oidc/          # M06 — oidc-provider, Redis adapter, PKCE
+│   │   │       ├── saml/          # M07 — IDP metadata, SSO, SLO, signed assertions
+│   │   │       ├── jwt-auth/      # M08 — RFC 7523 client assertions, mTLS
+│   │   │       ├── mfa/           # M09 — TOTP, backup codes
+│   │   │       ├── sessions/      # M10 — SSO session tracking, SLO fanout
+│   │   │       └── audit/         # M11 — BullMQ queue, MongoDB event store
+│   │   └── drizzle/migrations/
+│   └── admin/               # M12 — Next.js 15 admin dashboard
+│       ├── src/app/
+│       │   ├── login/             # Admin key auth
+│       │   ├── dashboard/         # Overview cards + recent events
+│       │   ├── applications/      # App registry CRUD
+│       │   ├── users/             # User search, detail, MFA status
+│       │   ├── keys/              # Key status + rotation
+│       │   └── audit/             # Filterable event log
+│       └── src/lib/               # API client, auth helpers
+├── packages/types/
+├── tsconfig.base.json
+└── pnpm-workspace.yaml
 ```
-
-- **Domain** — pure business logic, zero dependencies
-- **Application** — use cases and port interfaces
-- **Infrastructure** — Postgres, Redis, MongoDB adapters (swappable)
-- **Interface** — Fastify routes and request/response DTOs
-- **Shared kernel** — Result monad, typed errors, config, logger
-
-Every external system is behind an interface. Swap any adapter by changing one registration in the Awilix DI container.
-
----
-
-## Prerequisites
-
-### 1. Install Node.js (v20 or higher)
-
-```bash
-node --version   # must be >= 20
-```
-
-Install via [nvm](https://github.com/nvm-sh/nvm):
-
-```bash
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-nvm install 20 && nvm use 20 && nvm alias default 20
-```
-
-### 2. Install pnpm (v9 or higher)
-
-```bash
-npm install -g pnpm
-pnpm --version   # must be >= 9
-```
-
-### 3. Install jq
-
-```bash
-brew install jq          # macOS
-sudo apt-get install jq  # Ubuntu
-```
-
----
-
-## External Services Setup
-
-### Supabase (Postgres)
-
-1. [supabase.com](https://supabase.com) → New project
-2. **Project Settings → Database → Connection string**
-3. **Transaction** mode URI (port 6543) → `DATABASE_URL`
-4. **Session** mode URI (port 5432) → `DATABASE_URL_DIRECT`
-
-### Redis Cloud
-
-1. [redis.io/cloud](https://redis.io/cloud) → New database (free tier)
-2. Copy the `rediss://` connection string → `REDIS_URL`
-
-### MongoDB Atlas
-
-1. [mongodb.com/atlas](https://mongodb.com/atlas) → Free cluster
-2. **Database Access** → new user with read/write
-3. **Network Access** → add your IP
-4. **Connect → Drivers** → copy URI → `MONGODB_URI`
-
----
-
-## Project Setup
-
-```bash
-git clone <repo>
-cd auth-idp
-pnpm install
-cp apps/api/.env.example apps/api/.env
-# fill in .env
-```
-
----
-
-## Environment Configuration
-
-```env
-NODE_ENV=development
-PORT=3000
-LOG_LEVEL=info
-IDP_BASE_URL=http://localhost:3000
-
-DATABASE_URL=postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres
-DATABASE_URL_DIRECT=postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:5432/postgres
-
-REDIS_URL=rediss://:[password]@[host]:[port]
-MONGODB_URI=mongodb+srv://[user]:[password]@[cluster].mongodb.net/auth_idp
-
-ADMIN_API_KEY=        # generate below
-COOKIE_SECRET=        # generate below
-KEY_ENCRYPTION_SECRET=  # generate below
-```
-
-## Generate Secrets
-
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
-
-Run three times — one value each for `ADMIN_API_KEY`, `COOKIE_SECRET`, `KEY_ENCRYPTION_SECRET`.
-
----
-
-## Running the Project
-
-```bash
-cd apps/api
-pnpm dev
-```
-
-Expected startup output:
-```
-INFO: Postgres client initialized
-INFO: Redis connected
-INFO: MongoDB connected
-INFO: Signing key bootstrapped
-INFO: OIDC provider mounted
-INFO: SAML 2.0 module registered
-INFO: JWT / cert auth module registered
-INFO: MFA module registered
-INFO: Session management module registered
-INFO: Audit logging module registered
-INFO: Server listening on port 3000
-```
-
----
-
-## Testing with cURL
-
-### Health check
-
-```bash
-curl -s http://localhost:3000/health | jq
-```
-
-### Register a user
-
-```bash
-curl -s -X POST http://localhost:3000/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"email":"alice@example.com","password":"Password1"}' | jq
-```
-
-### Login
-
-```bash
-export SESSION=$(curl -s -X POST http://localhost:3000/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"alice@example.com","password":"Password1"}' | jq -r '.sessionToken')
-```
-
-### Get profile
-
-```bash
-curl -s http://localhost:3000/auth/me \
-  -H "Authorization: Bearer $SESSION" | jq
-```
-
-### Logout
-
-```bash
-curl -s -X POST http://localhost:3000/auth/logout \
-  -H "Authorization: Bearer $SESSION" | jq
-```
-
----
-
-## Database Schema
-
-| Table | Purpose |
-|---|---|
-| `signing_keys` | RSA/EC key pairs (private key AES-256-GCM encrypted) |
-| `users` | Accounts — email, Argon2id hash, status, lockout, MFA fields |
-| `user_profiles` | OIDC claims — name, picture, locale, custom attributes |
-| `applications` | Registered SPs — SAML, OIDC, JWT |
-| `saml_configs` | Per-app SAML config — entityId, ACS URL, attributeMappings |
-| `oidc_clients` | Per-app OIDC config — clientId, redirect URIs, grant types |
-| `jwt_configs` | Per-app JWT config — public key, certThumbprint, audience |
-| `sso_sessions` | Active SSO sessions — status, participating apps, expiry |
-| `audit_logs` | Immutable audit trail — MongoDB Atlas, 90-day TTL |
-
-### Schema Change Workflow
-
-```bash
-cd apps/api
-pnpm drizzle-kit generate
-# Copy generated SQL → Supabase SQL Editor → Run
-```
-
----
-
-## Key Management
-
-| Method | Path | Auth | Purpose |
-|---|---|---|---|
-| `POST` | `/api/v1/admin/keys/generate` | Admin | Generate new RSA key pair |
-| `POST` | `/api/v1/admin/keys/rotate` | Admin | Rotate active key |
-| `GET` | `/.well-known/jwks.json` | Public | JWKS public keys |
-
-Keys are auto-bootstrapped at startup. Retired keys stay in JWKS until all tokens signed with them expire.
-
----
-
-## Application Registry
-
-| Method | Path | Auth | Purpose |
-|---|---|---|---|
-| `POST` | `/api/v1/admin/applications` | Admin | Register SAML / OIDC / JWT app |
-| `GET` | `/api/v1/admin/applications` | Admin | List all apps |
-| `GET` | `/api/v1/admin/applications/:id` | Admin | Get app with protocol config |
-| `PATCH` | `/api/v1/admin/applications/:id` | Admin | Update app |
-
----
-
-## OIDC / OAuth 2.0
-
-| Endpoint | Purpose |
-|---|---|
-| `GET /.well-known/openid-configuration` | Discovery document |
-| `GET /oidc/jwks` | JWKS |
-| `GET /oidc/auth` | Authorization endpoint |
-| `POST /oidc/token` | Token endpoint |
-| `GET /oidc/userinfo` | User info |
-| `POST /oidc/introspect` | Token introspection |
-| `POST /oidc/revoke` | Token revocation |
-| `GET /oidc/end_session` | Logout |
-
----
-
-## SAML 2.0
-
-| Endpoint | Purpose |
-|---|---|
-| `GET /saml/:appId/metadata` | IDP metadata XML |
-| `POST /saml/:appId/sso` | SSO entry point |
-| `POST /saml/:appId/sso/login` | Credential submit during SSO |
-| `POST /saml/:appId/slo` | Single Logout |
-
----
-
-## JWT / Certificate Auth
-
-### RFC 7523 — Client Assertion
-
-```bash
-curl -s -X POST http://localhost:3000/auth/token/jwt-assertion \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  --data-urlencode "client_id=APP_ID" \
-  --data-urlencode "client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer" \
-  --data-urlencode "client_assertion=SIGNED_JWT" | jq
-```
-
-### mTLS
-
-```bash
-curl -s -X POST http://localhost:3000/auth/token/mtls \
-  -H "Content-Type: application/json" \
-  -d '{"client_cert_pem": "-----BEGIN CERTIFICATE-----\n..."}' | jq
-```
-
----
-
-## MFA
-
-| Endpoint | Auth | Purpose |
-|---|---|---|
-| `GET /auth/mfa/status` | Session | Check MFA enrollment status |
-| `POST /auth/mfa/totp/setup` | Session | Generate TOTP secret + otpauth URI |
-| `POST /auth/mfa/totp/verify` | Session | Verify first code and activate MFA |
-| `POST /auth/mfa/totp/validate` | Session | Validate a code during login |
-| `POST /auth/mfa/backup-codes/generate` | Session | Generate 10 single-use backup codes |
-| `POST /auth/mfa/backup-codes/use` | Session | Consume a backup code during login |
-
-Generate TOTP codes for testing (run from `apps/api`):
-
-```bash
-node -e "const s=require('speakeasy'); console.log(s.totp({secret:'YOUR_SECRET',encoding:'base32'}))"
-```
-
----
-
-## Session Management
-
-| Endpoint | Auth | Purpose |
-|---|---|---|
-| `GET /auth/sessions` | Session | List active SSO sessions |
-| `DELETE /auth/sessions/:id` | Session | Revoke a specific session |
-| `DELETE /auth/sessions` | Session | Revoke all sessions (global logout) |
-| `POST /api/v1/admin/sessions/revoke/:userId` | Admin | Force-logout a user (userId must be UUID) |
-
----
-
-## Audit Logging
-
-| Endpoint | Auth | Purpose |
-|---|---|---|
-| `GET /api/v1/admin/audit` | Admin | Query audit events |
-| `GET /api/v1/admin/audit/:eventId` | Admin | Get a specific event |
-
-### Query parameters
-
-| Parameter | Type | Purpose |
-|---|---|---|
-| `userId` | UUID | Filter by user |
-| `appId` | UUID | Filter by application |
-| `type` | string | Filter by event type |
-| `outcome` | success \| failure | Filter by outcome |
-| `from` | ISO date | Start of date range |
-| `to` | ISO date | End of date range |
-| `limit` | number | Max results (default 50, max 200) |
-| `offset` | number | Pagination offset |
-
-### Event types
-
-`user.login.success` · `user.login.failure` · `user.logout` · `user.register` · `mfa.setup` · `mfa.activated` · `mfa.validated` · `mfa.validation.failure` · `mfa.backup_code.used` · `saml.sso.success` · `saml.sso.failure` · `saml.slo` · `oidc.token.issued` · `jwt.token.issued` · `key.rotated` · `session.revoked` · `session.revoked_all`
-
-Audit events are written asynchronously via BullMQ → MongoDB Atlas with a 90-day TTL.
-
----
-
-## Project Structure
-
-```
-auth-idp/apps/api/src/
-├── shared/
-│   ├── result/          # Result<T,E> monad
-│   ├── errors/          # AppError hierarchy
-│   ├── config/          # Zod env schema
-│   ├── logger/          # Pino structured logging
-│   └── container/       # Awilix DI container
-├── infrastructure/
-│   ├── database/        # Drizzle + postgres
-│   ├── cache/           # ioredis
-│   └── mongo/           # MongoDB Atlas
-├── database/
-│   └── index.ts         # All Drizzle schema re-exports
-└── modules/
-    ├── keys/            # M03 — RSA/EC generation, AES-256-GCM, JWKS, rotation
-    ├── users/           # M04 — Registration, login, Argon2id, sessions, profiles
-    ├── applications/    # M05 — App registry, SAML/OIDC/JWT config, credentials
-    ├── oidc/            # M06 — oidc-provider, Redis adapter, interactions
-    ├── saml/            # M07 — IDP metadata, SSO, SLO, samlify, assertions
-    ├── jwt/             # M08 — RFC 7523 client assertions, mTLS, token issuance
-    ├── mfa/             # M09 — TOTP (speakeasy), Argon2id backup codes
-    ├── sessions/        # M10 — SSO session tracking, SLO fanout, admin revocation
-    └── audit/           # M11 — BullMQ queue, MongoDB persistence, admin query API
-        ├── domain/      # AuditEvent entity, AuditEventType
-        ├── application/ # QueryAuditEvents, GetAuditEvent, IAuditLogger, IAuditRepository
-        ├── infrastructure/ # MongoAuditRepository, BullmqAuditLogger
-        ├── worker/      # AuditWorker — BullMQ consumer
-        └── interface/   # AuditRoutes
-```
-
----
 
 ## Module Status
 
@@ -413,9 +61,13 @@ auth-idp/apps/api/src/
 | M09 | MFA — TOTP (speakeasy), Argon2id backup codes, enrollment flow | ✅ Complete |
 | M10 | Session management — SSO session tracking, SLO fanout, admin revocation | ✅ Complete |
 | M11 | Audit logging — BullMQ queue, MongoDB event store, admin query API | ✅ Complete |
-| M12 | Admin dashboard — Next.js UI | 🔜 Next |
-
----
+| **M12** | **Admin dashboard — Next.js 15** | **🔧 In Progress** |
+| M12a | Project setup + layout, sidebar nav, admin key auth, health page | 🔜 Next |
+| M12b | Key & application management — status card, rotate, register apps | ⏳ Pending |
+| M12c | User management — search, detail view, MFA status, force-logout | ⏳ Pending |
+| M12d | Audit log viewer — filterable, paginated table, event detail | ⏳ Pending |
+| M12e | Dashboard overview — summary cards, recent events feed | ⏳ Pending |
+| M13 | Deployment — Fly.io config, secrets, health checks, SP integration | ⏳ Pending |
 
 ## Tech Stack
 
@@ -432,13 +84,12 @@ auth-idp/apps/api/src/
 | Logging | Pino + pino-pretty | Structured JSON logging |
 | Password hashing | Argon2id | OWASP-recommended parameters |
 | OIDC / OAuth 2.0 | oidc-provider | Full spec compliance |
-| SAML 2.0 | samlify + node-forge | IDP metadata, SSO, SLO, signed assertions |
+| SAML 2.0 | samlify + node-forge | IDP metadata, SSO, SLO |
 | JWT signing | jose | JWK export, SPKI import, SignJWT |
 | Key crypto | Node.js crypto (built-in) | RSA/EC generation, AES-256-GCM |
-| Cert handling | node-forge | X.509 cert generation, thumbprint extraction |
 | TOTP | speakeasy | TOTP generation and verification |
-
----
+| Admin UI | Next.js 15 + Tailwind + shadcn/ui | Admin dashboard |
+| Deployment | Fly.io | API + admin hosting |
 
 ## Troubleshooting
 
@@ -457,8 +108,6 @@ auth-idp/apps/api/src/
 | Session `DATABASE_ERROR` on admin revoke | `userId` must be a valid UUID |
 | Audit events not appearing | BullMQ is async — wait 2s after action before querying |
 | BullMQ eviction warning | Set Redis eviction policy to `noeviction` in Redis Cloud settings |
-
----
 
 ## License
 
