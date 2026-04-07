@@ -9,7 +9,9 @@
   "scripts": {
     "dev": "pnpm --filter @idp/api dev",
     "build": "pnpm --filter @idp/api build",
-    "test": "pnpm -r test"
+    "test": "pnpm -r test",
+    "dev:admin": "pnpm --filter @idp/admin dev",
+    "build:admin": "pnpm --filter @idp/admin build"
   },
   "devDependencies": {
     "typescript": "^5.4.5"

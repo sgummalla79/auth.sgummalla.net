@@ -9,7 +9,9 @@ git clone https://github.com/sgummalla79/auth.sgummalla.net.git
 cd auth.sgummalla.net/auth-idp
 pnpm install
 cp apps/api/.env.example apps/api/.env   # fill in all values
+cp apps/admin/.env.example apps/admin/.env
 pnpm dev                                  # starts API on :3000
+pnpm dev:admin                            # starts admin dashboard on :3001
 ```
 
 ## Architecture
@@ -62,12 +64,104 @@ auth-idp/
 | M10 | Session management — SSO session tracking, SLO fanout, admin revocation | ✅ Complete |
 | M11 | Audit logging — BullMQ queue, MongoDB event store, admin query API | ✅ Complete |
 | **M12** | **Admin dashboard — Next.js 15** | **🔧 In Progress** |
-| M12a | Project setup + layout, sidebar nav, admin key auth, health page | 🔜 Next |
-| M12b | Key & application management — status card, rotate, register apps | ⏳ Pending |
-| M12c | User management — search, detail view, MFA status, force-logout | ⏳ Pending |
-| M12d | Audit log viewer — filterable, paginated table, event detail | ⏳ Pending |
+| M12a | Project setup + layout, sidebar nav, admin key auth, health page | ✅ Complete |
+| M12b | Key & application management — status card, rotate, register apps | ✅ Complete |
+| M12c | User management — search, detail view, MFA status, force-logout | ✅ Complete |
+| M12d | Audit log viewer — filterable, paginated table, event detail | 🔜 Next |
 | M12e | Dashboard overview — summary cards, recent events feed | ⏳ Pending |
 | M13 | Deployment — Fly.io config, secrets, health checks, SP integration | ⏳ Pending |
+
+## API Endpoints
+
+### Authentication
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| `POST` | `/auth/register` | Public | Create account |
+| `POST` | `/auth/login` | Public | Login, get session token |
+| `POST` | `/auth/logout` | Session | Logout |
+| `GET` | `/auth/me` | Session | Get current user profile |
+| `PATCH` | `/auth/me` | Session | Update profile |
+
+### Key Management
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| `GET` | `/.well-known/jwks.json` | Public | JWKS public keys |
+| `POST` | `/api/v1/admin/keys/generate` | Admin | Generate signing key |
+| `POST` | `/api/v1/admin/keys/rotate` | Admin | Rotate signing key |
+
+### Application Registry
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| `POST` | `/api/v1/admin/applications` | Admin | Register SAML/OIDC/JWT app |
+| `GET` | `/api/v1/admin/applications` | Admin | List all apps |
+| `GET` | `/api/v1/admin/applications/:id` | Admin | Get app with protocol config |
+| `PATCH` | `/api/v1/admin/applications/:id` | Admin | Update app |
+
+### User Management (Admin)
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| `GET` | `/api/v1/admin/users` | Admin | List/search users |
+| `GET` | `/api/v1/admin/users/:id` | Admin | User detail with profile + MFA |
+
+### OIDC / OAuth 2.0
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /.well-known/openid-configuration` | Discovery document |
+| `GET /oidc/jwks` | JWKS |
+| `GET /oidc/auth` | Authorization endpoint |
+| `POST /oidc/token` | Token endpoint |
+| `GET /oidc/userinfo` | User info |
+| `POST /oidc/introspect` | Token introspection |
+| `POST /oidc/revoke` | Token revocation |
+| `GET /oidc/end_session` | Logout |
+
+### SAML 2.0
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /saml/:appId/metadata` | IDP metadata XML |
+| `POST /saml/:appId/sso` | SSO entry point |
+| `POST /saml/:appId/sso/login` | Credential submit during SSO |
+| `POST /saml/:appId/slo` | Single Logout |
+
+### JWT / Certificate Auth
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /auth/token/jwt-assertion` | RFC 7523 client assertion |
+| `POST /auth/token/mtls` | mTLS certificate auth |
+
+### MFA
+
+| Endpoint | Auth | Purpose |
+|---|---|---|
+| `GET /auth/mfa/status` | Session | Check MFA enrollment |
+| `POST /auth/mfa/totp/setup` | Session | Generate TOTP secret |
+| `POST /auth/mfa/totp/verify` | Session | Verify and activate MFA |
+| `POST /auth/mfa/totp/validate` | Session | Validate code during login |
+| `POST /auth/mfa/backup-codes/generate` | Session | Generate backup codes |
+| `POST /auth/mfa/backup-codes/use` | Session | Consume backup code |
+
+### Session Management
+
+| Endpoint | Auth | Purpose |
+|---|---|---|
+| `GET /auth/sessions` | Session | List active SSO sessions |
+| `DELETE /auth/sessions/:id` | Session | Revoke specific session |
+| `DELETE /auth/sessions` | Session | Revoke all (global logout) |
+| `POST /api/v1/admin/sessions/revoke/:userId` | Admin | Force-logout user |
+
+### Audit Logging
+
+| Endpoint | Auth | Purpose |
+|---|---|---|
+| `GET /api/v1/admin/audit` | Admin | Query audit events |
+| `GET /api/v1/admin/audit/:id` | Admin | Get event detail |
 
 ## Tech Stack
 
@@ -88,8 +182,20 @@ auth-idp/
 | JWT signing | jose | JWK export, SPKI import, SignJWT |
 | Key crypto | Node.js crypto (built-in) | RSA/EC generation, AES-256-GCM |
 | TOTP | speakeasy | TOTP generation and verification |
-| Admin UI | Next.js 15 + Tailwind + shadcn/ui | Admin dashboard |
+| Admin UI | Next.js 15 + Tailwind CSS | Admin dashboard |
 | Deployment | Fly.io | API + admin hosting |
+
+## Admin Dashboard
+
+The admin dashboard runs on `http://localhost:3001` and provides:
+
+- **Login** — authenticates with `ADMIN_API_KEY` stored in httpOnly cookie
+- **Keys** — view active signing key, rotate with confirmation
+- **Applications** — list, register (SAML/OIDC/JWT), view detail
+- **Users** — search by email/status, view profile + MFA factors, force-logout
+- **Audit Log** — coming in M12d
+- **Dashboard Overview** — coming in M12e
+- **Dark/Light mode** — toggle in sidebar, respects system preference
 
 ## Troubleshooting
 
@@ -108,6 +214,8 @@ auth-idp/
 | Session `DATABASE_ERROR` on admin revoke | `userId` must be a valid UUID |
 | Audit events not appearing | BullMQ is async — wait 2s after action before querying |
 | BullMQ eviction warning | Set Redis eviction policy to `noeviction` in Redis Cloud settings |
+| Admin dashboard login fails | Ensure `API_BASE_URL` in `apps/admin/.env` matches running API |
+| Health page shows unreachable | API must be running on port 3000 |
 
 ## License
 

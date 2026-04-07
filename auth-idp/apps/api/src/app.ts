@@ -20,6 +20,7 @@ import fastifyFormBody from '@fastify/formbody'
 import { registerMfaModule } from './modules/mfa/index.js'
 import { registerSessionModule } from './modules/sessions/index.js'
 import { registerAuditModule } from './modules/audit/index.js'
+import { registerAdminUserRoutes } from './modules/users/interface/AdminUserRoutes.js'
 
 const logger = createLogger('app')
 
@@ -65,6 +66,13 @@ export async function buildApp(): Promise<FastifyInstance> {
   const auditRepository = container.cradle.auditRepository
   const auditWorker = container.cradle.auditWorker
   await registerAuditModule(app, auditRepository, auditWorker)
+
+  await app.register(async (adminApp) => {
+    await registerAdminUserRoutes(adminApp, {
+      db: container.cradle.db,
+      config: container.cradle.config,
+    })
+  })
   app.decorate('container', container)
 
   app.addHook('onRequest', async (request: FastifyRequest) => {

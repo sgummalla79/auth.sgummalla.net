@@ -1,0 +1,62 @@
+@import 'tailwindcss';
+
+:root {
+  --sidebar-width: 240px;
+  --color-bg: #fafaf9;
+  --color-sidebar: #1c1917;
+  --color-sidebar-hover: #292524;
+  --color-sidebar-active: #0c0a09;
+  --color-sidebar-text: #d6d3d1;
+  --color-sidebar-text-active: #fafaf9;
+  --color-accent: #2563eb;
+  --color-accent-hover: #1d4ed8;
+  --color-danger: #dc2626;
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-border: #e7e5e4;
+  --color-text: #1c1917;
+  --color-text-secondary: #78716c;
+  --color-card: #ffffff;
+  --color-input-bg: #ffffff;
+  --color-error-bg: #fef2f2;
+  --color-error-text: #b91c1c;
+  --color-error-border: #fecaca;
+}
+
+[data-theme='dark'] {
+  --color-bg: #0c0a09;
+  --color-sidebar: #1c1917;
+  --color-sidebar-hover: #292524;
+  --color-sidebar-active: #44403c;
+  --color-sidebar-text: #a8a29e;
+  --color-sidebar-text-active: #fafaf9;
+  --color-accent: #3b82f6;
+  --color-accent-hover: #2563eb;
+  --color-danger: #ef4444;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-border: #292524;
+  --color-text: #fafaf9;
+  --color-text-secondary: #a8a29e;
+  --color-card: #1c1917;
+  --color-input-bg: #1c1917;
+  --color-error-bg: #2d1515;
+  --color-error-text: #fca5a5;
+  --color-error-border: #7f1d1d;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  transition: background 0.2s, color 0.2s;
+}
+
+input, textarea, select {
+  background: var(--color-input-bg);
+  color: var(--color-text);
+}
+
+table {
+  color: var(--color-text);
+}
