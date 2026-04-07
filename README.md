@@ -63,13 +63,13 @@ auth-idp/
 | M09 | MFA — TOTP (speakeasy), Argon2id backup codes, enrollment flow | ✅ Complete |
 | M10 | Session management — SSO session tracking, SLO fanout, admin revocation | ✅ Complete |
 | M11 | Audit logging — BullMQ queue, MongoDB event store, admin query API | ✅ Complete |
-| **M12** | **Admin dashboard — Next.js 15** | **🔧 In Progress** |
+| M12 | Admin dashboard — Next.js 15 | ✅ Complete |
 | M12a | Project setup + layout, sidebar nav, admin key auth, health page | ✅ Complete |
 | M12b | Key & application management — status card, rotate, register apps | ✅ Complete |
 | M12c | User management — search, detail view, MFA status, force-logout | ✅ Complete |
-| M12d | Audit log viewer — filterable, paginated table, event detail | 🔜 Next |
-| M12e | Dashboard overview — summary cards, recent events feed | ⏳ Pending |
-| M13 | Deployment — Fly.io config, secrets, health checks, SP integration | ⏳ Pending |
+| M12d | Audit log viewer — filterable, paginated table, event detail | ✅ Complete |
+| M12e | Dashboard overview — summary cards, recent events feed | ✅ Complete |
+| M13 | Deployment — Fly.io config, secrets, health checks, SP integration | 🔜 Next |
 
 ## API Endpoints
 
@@ -189,12 +189,12 @@ auth-idp/
 
 The admin dashboard runs on `http://localhost:3001` and provides:
 
-- **Login** — authenticates with `ADMIN_API_KEY` stored in httpOnly cookie
-- **Keys** — view active signing key, rotate with confirmation
-- **Applications** — list, register (SAML/OIDC/JWT), view detail
+- **Dashboard** — summary cards (total users, registered apps, 24h failures, active key) + recent activity feed
+- **Keys** — view active signing key details, rotate with confirmation
+- **Applications** — list all apps, register new (SAML/OIDC/JWT with protocol-specific fields), view detail
 - **Users** — search by email/status, view profile + MFA factors, force-logout
-- **Audit Log** — coming in M12d
-- **Dashboard Overview** — coming in M12e
+- **Audit Log** — filterable table (type, outcome, user, date range), click to expand full event detail with metadata
+- **Health** — API connectivity status with uptime
 - **Dark/Light mode** — toggle in sidebar, respects system preference
 
 ## Troubleshooting
