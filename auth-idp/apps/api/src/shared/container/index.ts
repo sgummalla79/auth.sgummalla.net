@@ -13,7 +13,6 @@ import { GetMfaStatusUseCase } from '../../modules/mfa/application/use-cases/Get
 import { OtplibTotpService } from '../../modules/mfa/infrastructure/OtplibTotpService.js'
 import { Argon2BackupCodeService } from '../../modules/mfa/infrastructure/Argon2BackupCodeService.js'
 import { SupabaseMfaRepository } from '../../modules/mfa/infrastructure/SupabaseMfaRepository.js'
-
 import { GetIdpMetadataUseCase } from '../../modules/saml/application/use-cases/GetIdpMetadata.js'
 import { HandleSsoRequestUseCase } from '../../modules/saml/application/use-cases/HandleSsoRequest.js'
 import { HandleSloRequestUseCase } from '../../modules/saml/application/use-cases/HandleSloRequest.js'
@@ -25,6 +24,13 @@ import { HandleMtlsTokenUseCase } from '../../modules/jwt/application/use-cases/
 import { JoseJwtAssertionVerifier } from '../../modules/jwt/infrastructure/JoseJwtAssertionVerifier.js'
 import { JoseAccessTokenIssuer } from '../../modules/jwt/infrastructure/JoseAccessTokenIssuer.js'
 import { ForgeCertThumbprintExtractor } from '../../modules/jwt/infrastructure/ForgeCertThumbprintExtractor.js'
+import { CreateSsoSessionUseCase } from '../../modules/sessions/application/use-cases/CreateSsoSession.js'
+import { AddParticipatingAppUseCase } from '../../modules/sessions/application/use-cases/AddParticipatingApp.js'
+import { GetUserSessionsUseCase } from '../../modules/sessions/application/use-cases/GetUserSessions.js'
+import { RevokeSessionUseCase } from '../../modules/sessions/application/use-cases/RevokeSession.js'
+import { RevokeAllSessionsUseCase } from '../../modules/sessions/application/use-cases/RevokeAllSessions.js'
+import { SupabaseSsoSessionRepository } from '../../modules/sessions/infrastructure/SupabaseSsoSessionRepository.js'
+import { HttpSloFanoutService } from '../../modules/sessions/infrastructure/HttpSloFanoutService.js'
 
 import type { Env } from '../config/env.js'
 import type { Db } from 'mongodb'
@@ -104,6 +110,14 @@ export interface Cradle {
   generateBackupCodesUseCase: GenerateBackupCodesUseCase
   useBackupCodeUseCase: UseBackupCodeUseCase
   getMfaStatusUseCase: GetMfaStatusUseCase
+  //sessions
+  ssoSessionRepository: SupabaseSsoSessionRepository
+  sloFanoutService: HttpSloFanoutService
+  createSsoSessionUseCase: CreateSsoSessionUseCase
+  addParticipatingAppUseCase: AddParticipatingAppUseCase
+  getUserSessionsUseCase: GetUserSessionsUseCase
+  revokeSessionUseCase: RevokeSessionUseCase
+  revokeAllSessionsUseCase: RevokeAllSessionsUseCase
 }
 
 export type AppContainer = AwilixContainer<Cradle>
@@ -149,6 +163,16 @@ export function buildContainer(): AppContainer {
     generateBackupCodesUseCase: asClass(GenerateBackupCodesUseCase).scoped(),
     useBackupCodeUseCase:      asClass(UseBackupCodeUseCase).scoped(),
     getMfaStatusUseCase:       asClass(GetMfaStatusUseCase).scoped(),
+  })
+
+  container.register({
+    ssoSessionRepository:      asClass(SupabaseSsoSessionRepository).scoped(),
+    sloFanoutService:          asClass(HttpSloFanoutService).scoped(),
+    createSsoSessionUseCase:   asClass(CreateSsoSessionUseCase).scoped(),
+    addParticipatingAppUseCase: asClass(AddParticipatingAppUseCase).scoped(),
+    getUserSessionsUseCase:    asClass(GetUserSessionsUseCase).scoped(),
+    revokeSessionUseCase:      asClass(RevokeSessionUseCase).scoped(),
+    revokeAllSessionsUseCase:  asClass(RevokeAllSessionsUseCase).scoped(),
   })
 
   return container

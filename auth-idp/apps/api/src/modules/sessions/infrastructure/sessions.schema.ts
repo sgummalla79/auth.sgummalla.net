@@ -2,7 +2,7 @@ import {
   pgTable, pgEnum, uuid, text, timestamp, index, uniqueIndex,
 } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
-import { users } from '../../users/infrastructure/users.schema'
+import { users } from '../../users/infrastructure/users.schema.js'
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 

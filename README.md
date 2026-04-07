@@ -24,6 +24,7 @@ Built with Node.js, TypeScript, Fastify, Supabase (Postgres), Redis Cloud, and M
 - [SAML 2.0](#saml-20)
 - [JWT / Certificate Auth](#jwt--certificate-auth)
 - [MFA](#mfa)
+- [Session Management](#session-management)
 - [Project Structure](#project-structure)
 - [Module Status](#module-status)
 - [Tech Stack](#tech-stack)
@@ -161,6 +162,7 @@ INFO: OIDC provider mounted
 INFO: SAML 2.0 module registered
 INFO: JWT / cert auth module registered
 INFO: MFA module registered
+INFO: Session management module registered
 INFO: Server listening on port 3000
 ```
 
@@ -208,8 +210,6 @@ curl -s -X POST http://localhost:3000/auth/logout \
 
 ## Database Schema
 
-9 tables — applied via Supabase SQL Editor:
-
 | Table | Purpose |
 |---|---|
 | `signing_keys` | RSA/EC key pairs (private key AES-256-GCM encrypted) |
@@ -219,7 +219,7 @@ curl -s -X POST http://localhost:3000/auth/logout \
 | `saml_configs` | Per-app SAML config — entityId, ACS URL, attributeMappings |
 | `oidc_clients` | Per-app OIDC config — clientId, redirect URIs, grant types |
 | `jwt_configs` | Per-app JWT config — public key, certThumbprint, audience |
-| `sso_sessions` | Active SSO sessions (M10) |
+| `sso_sessions` | Active SSO sessions — status, participating apps, expiry |
 | `audit_logs` | Immutable audit trail (M11) |
 
 ### Schema Change Workflow
@@ -314,13 +314,24 @@ curl -s -X POST http://localhost:3000/auth/token/mtls \
 | `POST /auth/mfa/backup-codes/generate` | Session | Generate 10 single-use backup codes |
 | `POST /auth/mfa/backup-codes/use` | Session | Consume a backup code during login |
 
-TOTP secrets are encrypted at rest using the same AES-256-GCM key encryption service as signing keys. Backup codes are hashed with Argon2id — plaintext shown once only.
-
 Generate TOTP codes for testing (run from `apps/api`):
 
 ```bash
 node -e "const s=require('speakeasy'); console.log(s.totp({secret:'YOUR_SECRET',encoding:'base32'}))"
 ```
+
+---
+
+## Session Management
+
+| Endpoint | Auth | Purpose |
+|---|---|---|
+| `GET /auth/sessions` | Session | List active SSO sessions |
+| `DELETE /auth/sessions/:id` | Session | Revoke a specific session |
+| `DELETE /auth/sessions` | Session | Revoke all sessions (global logout) |
+| `POST /api/v1/admin/sessions/revoke/:userId` | Admin | Force-logout a user |
+
+SSO sessions are created automatically when users authenticate via SAML. On logout, the IDP fans out SAML LogoutRequests to all participating SPs. The `userId` in admin endpoints must be a valid UUID.
 
 ---
 
@@ -347,11 +358,12 @@ auth-idp/apps/api/src/
     ├── oidc/            # M06 — oidc-provider, Redis adapter, interactions
     ├── saml/            # M07 — IDP metadata, SSO, SLO, samlify, assertions
     ├── jwt/             # M08 — RFC 7523 client assertions, mTLS, token issuance
-    └── mfa/             # M09 — TOTP (speakeasy), backup codes (Argon2id)
-        ├── domain/      # MfaStatus, TotpSecret
-        ├── application/ # SetupTotp, VerifyTotpSetup, ValidateTotp, BackupCodes, GetMfaStatus
-        ├── infrastructure/ # OtplibTotpService (speakeasy), Argon2BackupCodeService, SupabaseMfaRepository
-        └── interface/   # MfaRoutes
+    ├── mfa/             # M09 — TOTP (speakeasy), Argon2id backup codes
+    └── sessions/        # M10 — SSO session tracking, SLO fanout, admin revocation
+        ├── domain/      # SsoSession entity, ParticipatingApp
+        ├── application/ # CreateSsoSession, AddParticipatingApp, GetUserSessions, RevokeSession, RevokeAllSessions
+        ├── infrastructure/ # SupabaseSsoSessionRepository, HttpSloFanoutService
+        └── interface/   # SessionRoutes
 ```
 
 ---
@@ -369,8 +381,8 @@ auth-idp/apps/api/src/
 | M07 | SAML 2.0 — IDP metadata, SSO flow, signed assertions, SLO | ✅ Complete |
 | M08 | JWT / cert auth — RFC 7523 client assertions, mTLS, token issuance | ✅ Complete |
 | M09 | MFA — TOTP (speakeasy), Argon2id backup codes, enrollment flow | ✅ Complete |
-| M10 | Session management — SSO sessions, cross-app single logout | 🔜 Next |
-| M11 | Audit logging — MongoDB event store, BullMQ | ⏳ Pending |
+| M10 | Session management — SSO session tracking, SLO fanout, admin revocation | ✅ Complete |
+| M11 | Audit logging — MongoDB event store, BullMQ | 🔜 Next |
 | M12 | Admin dashboard — Next.js UI | ⏳ Pending |
 
 ---
@@ -411,7 +423,7 @@ auth-idp/apps/api/src/
 | JWT assertion `UNAUTHORIZED` | `client_id` must be the app UUID, not the slug |
 | mTLS thumbprint mismatch | Strip with `sed 's/.*Fingerprint=//;s/://g'` — no prefix, lowercase |
 | TOTP always invalid | Clock skew — generate and submit within the same 30s window |
-| MFA backup codes column error | Run the ALTER TABLE migration in Supabase SQL Editor first |
+| Session `DATABASE_ERROR` on admin revoke | `userId` must be a valid UUID, not a plain string |
 
 ---
 

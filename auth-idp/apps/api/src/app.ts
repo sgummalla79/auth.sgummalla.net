@@ -18,6 +18,7 @@ import { registerSamlModule } from './modules/saml/index.js'
 import { registerJwtAuthModule } from './modules/jwt/index.js'
 import fastifyFormBody from '@fastify/formbody'
 import { registerMfaModule } from './modules/mfa/index.js'
+import { registerSessionModule } from './modules/sessions/index.js'
 
 const logger = createLogger('app')
 
@@ -59,6 +60,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await registerSamlModule(app)
   await registerJwtAuthModule(app)
   await registerMfaModule(app)
+  await registerSessionModule(app)
   app.decorate('container', container)
 
   app.addHook('onRequest', async (request: FastifyRequest) => {

@@ -217,6 +217,14 @@ export async function registerSamlRoutes(app: FastifyInstance): Promise<void> {
 
       const { sessionToken, userId } = loginResult.value
 
+      // Track SSO session
+      const { createSsoSessionUseCase } = request.container.cradle as Cradle
+
+      const ssoSessionResult = await createSsoSessionUseCase.execute({
+        userId,
+        idpSessionToken: sessionToken,
+      })
+
       // 3. Build SAML response for the now-authenticated user
       const ssoResult = await handleSsoRequestUseCase.execute({
         appId,
@@ -225,6 +233,15 @@ export async function registerSamlRoutes(app: FastifyInstance): Promise<void> {
         userId,
       })
       if (ssoResult.isErr()) throw ssoResult.error
+
+      // Add app to SSO session
+      if (ssoSessionResult.isOk()) {
+        const { addParticipatingAppUseCase } = request.container.cradle as Cradle
+        await addParticipatingAppUseCase.execute({
+          sessionId: ssoSessionResult.value.id,
+          app: { appId, protocol: 'saml' },
+        })
+      }
 
       const { endpoint, samlResponse: samlResp, relayState: relay } = ssoResult.value
 

@@ -9,7 +9,7 @@ export {
   oidcClientsRelations,
   jwtConfigs,
   jwtConfigsRelations,
-} from '../modules/applications/infrastructure/applications.schema'
+} from '../modules/applications/infrastructure/applications.schema.js'
 
 export type {
   Application, NewApplication,
@@ -17,7 +17,7 @@ export type {
   OidcClient, NewOidcClient,
   JwtConfig, NewJwtConfig,
   AuthProtocol, ApplicationStatus,
-} from '../modules/applications/infrastructure/applications.schema'
+} from '../modules/applications/infrastructure/applications.schema.js'
 
 export {
   userStatusEnum,
@@ -28,33 +28,33 @@ export {
   userProfilesRelations,
   userMfa,
   userMfaRelations,
-} from '../modules/users/infrastructure/users.schema'
+} from '../modules/users/infrastructure/users.schema.js'
 
 export type {
   User, NewUser,
   UserProfile, NewUserProfile,
   UserMfa, NewUserMfa,
   UserStatus, MfaType,
-} from '../modules/users/infrastructure/users.schema'
+} from '../modules/users/infrastructure/users.schema.js'
 
 export {
   keyUseEnum,
   keyAlgorithmEnum,
   keyStatusEnum,
   signingKeys,
-} from '../modules/keys/infrastructure/keys.schema'
+} from '../modules/keys/infrastructure/keys.schema.js'
 
 export type {
   SigningKey, NewSigningKey,
   KeyUse, KeyAlgorithm, KeyStatus,
-} from '../modules/keys/infrastructure/keys.schema'
+} from '../modules/keys/infrastructure/keys.schema.js'
 
 export {
   sessionStatusEnum,
   ssoSessions,
   ssoSessionsRelations,
-} from '../modules/sessions/infrastructure/sessions.schema'
+} from '../modules/sessions/infrastructure/sessions.schema.js'
 
 export type {
   SsoSession, NewSsoSession, SessionStatus,
-} from '../modules/sessions/infrastructure/sessions.schema'
+} from '../modules/sessions/infrastructure/sessions.schema.js'
