@@ -39,6 +39,7 @@ import { GetAuditEventUseCase } from '../../modules/audit/application/use-cases/
 import type { IOrganizationRepository } from '../../modules/organizations/application/ports/IOrganizationRepository.js'
 import type { CreateOrganizationUseCase } from '../../modules/organizations/application/use-cases/CreateOrganization.js'
 import type { GetOrganizationUseCase, ListOrganizationsUseCase, UpdateOrganizationUseCase } from '../../modules/organizations/application/use-cases/GetOrganization.js'
+import type { IOrganizationUserRepository } from '../../modules/organizations/application/ports/IOrganizationUserRepository.js'
 
 import type { Env } from '../config/env.js'
 import type { Db } from 'mongodb'
@@ -138,6 +139,8 @@ export interface Cradle {
   getOrganizationUseCase: GetOrganizationUseCase
   listOrganizationsUseCase: ListOrganizationsUseCase
   updateOrganizationUseCase: UpdateOrganizationUseCase
+  //Organization Users
+  orgUserRepository: IOrganizationUserRepository
 }
 
 export type AppContainer = AwilixContainer<Cradle>

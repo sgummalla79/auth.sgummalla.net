@@ -3,6 +3,7 @@ import type { UserStatus } from '../../../shared/types/domain-types.js'
 export class User {
   constructor(
     public readonly id: string,
+    public readonly organizationId: string,   // ← ADD as second parameter
     public readonly email: string,
     public readonly emailVerified: boolean,
     public readonly passwordHash: string | null,

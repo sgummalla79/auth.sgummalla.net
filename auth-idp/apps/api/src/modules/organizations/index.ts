@@ -7,6 +7,7 @@ import {
   ListOrganizationsUseCase,
   UpdateOrganizationUseCase,
 } from './application/use-cases/GetOrganization.js'
+import { SupabaseOrganizationUserRepository } from './infrastructure/SupabaseOrganizationUserRepository.js'
 
 export function registerOrganizationModule(container: AppContainer): void {
   container.register({
@@ -18,6 +19,7 @@ export function registerOrganizationModule(container: AppContainer): void {
     getOrganizationUseCase: asClass(GetOrganizationUseCase).singleton(),
     listOrganizationsUseCase: asClass(ListOrganizationsUseCase).singleton(),
     updateOrganizationUseCase: asClass(UpdateOrganizationUseCase).singleton(),
+    orgUserRepository: asClass(SupabaseOrganizationUserRepository).singleton(),
   })
 }
 

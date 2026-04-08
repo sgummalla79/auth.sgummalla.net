@@ -12,7 +12,7 @@ const mockAuditLogger = { log: vi.fn().mockResolvedValue(undefined) }
 
 function makeUser(): User {
   return new User(
-    'user-123', 'test@example.com', false,
+    'user-123', 'org-123', 'test@example.com', false,
     '$argon2id$v=19$m=65536,t=3,p=4$hashedpassword',
     'active', 0, null, new Date(), new Date(), null,
   )
@@ -111,7 +111,7 @@ describe('LoginUserUseCase', () => {
   })
 
   it('returns unauthorized for locked account', async () => {
-    const lockedUser = new User('user-123', 'test@example.com', false,
+    const lockedUser = new User('user-123', 'org-123', 'test@example.com', false,
       '$argon2id$hashed', 'active', 5, new Date(Date.now() + 60_000),
       new Date(), new Date(), null)
     mockRepo.findByEmail.mockResolvedValue(ok(lockedUser))
@@ -122,7 +122,7 @@ describe('LoginUserUseCase', () => {
 
   it('locks account after 5 failed attempts', async () => {
     mockHash.verify.mockResolvedValue(ok(false))
-    const nearLockUser = new User('user-123', 'test@example.com', false,
+    const nearLockUser = new User('user-123', 'org-123', 'test@example.com', false,
       '$argon2id$hashed', 'active', 4, null, new Date(), new Date(), null)
     mockRepo.findByEmail.mockResolvedValue(ok(nearLockUser))
     await useCase.execute({ email: 'test@example.com', password: 'Wrong1' })

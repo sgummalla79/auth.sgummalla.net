@@ -7,16 +7,9 @@ const EMAIL_FORMAT = 'urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress'
 
 function makeUser(): User {
   return new User(
-    'user_abc123',
-    'alice@example.com',
-    true,
-    null,
-    'active',
-    0,
-    null,
-    new Date(),
-    new Date(),
-    null,
+    'user-123', 'org-123', 'alice@example.com', false,
+    '$argon2id$v=19$m=65536,t=3,p=4$hashedpassword',
+    'active', 0, null, new Date(), new Date(), null,
   )
 }
 

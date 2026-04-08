@@ -56,28 +56,36 @@ export async function registerUserRoutes(app: FastifyInstance, deps: Deps): Prom
     },
   )
 
+  app.patch('/auth/me',
+    { preHandler: requireAuth(sessionStore) },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      if (!request.userId) return reply.status(401).send({ code: 'UNAUTHORIZED', message: 'Not authenticated' })
+      const result = await updateUserProfileUseCase.execute(request.userId, request.body)
+      if (isErr(result)) return sendError(reply, result.error, request.id)
+      return reply.status(200).send(result.value)
+    },
+  )
+
   app.get('/auth/me',
     { preHandler: requireAuth(sessionStore) },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      if (!request.userId) return reply.status(401).send({ code: 'UNAUTHORIZED', message: 'Not authenticated' })
       const result = await getUserProfileUseCase.execute(request.userId)
       if (isErr(result)) return sendError(reply, result.error, request.id)
       const { user, profile } = result.value
       return reply.status(200).send({
-        id: user.id, email: user.email, emailVerified: user.emailVerified,
-        status: user.status, givenName: profile.givenName, familyName: profile.familyName,
-        displayName: profile.displayName, pictureUrl: profile.pictureUrl,
-        locale: profile.locale, zoneinfo: profile.zoneinfo,
-        lastLoginAt: user.lastLoginAt, createdAt: user.createdAt,
+        id:            user.id,
+        email:         user.email,
+        emailVerified: user.emailVerified,
+        status:        user.status,
+        givenName:     profile.givenName,
+        familyName:    profile.familyName,
+        displayName:   profile.displayName,
+        pictureUrl:    profile.pictureUrl,
+        locale:        profile.locale,
+        zoneinfo:      profile.zoneinfo,
+        createdAt:     user.createdAt,
       })
-    },
-  )
-
-  app.patch('/auth/me',
-    { preHandler: requireAuth(sessionStore) },
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      const result = await updateUserProfileUseCase.execute(request.userId, request.body)
-      if (isErr(result)) return sendError(reply, result.error, request.id)
-      return reply.status(200).send(result.value)
     },
   )
 }

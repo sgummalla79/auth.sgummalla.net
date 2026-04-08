@@ -211,10 +211,44 @@ organizations  ← master entity
 ### Super-admin routes (require `x-admin-key: $ADMIN_API_KEY` header)
 
 ```
-POST   /admin/orgs              → create org + generate keypair + seed org_admin role
-GET    /admin/orgs              → list all orgs
-GET    /admin/orgs/:orgId       → get org detail
-PATCH  /admin/orgs/:orgId       → suspend / reactivate org
+POST   /admin/orgs                                    → create org + generate keypair + seed org_admin role
+GET    /admin/orgs                                    → list all orgs
+GET    /admin/orgs/:orgId                             → get org detail
+PATCH  /admin/orgs/:orgId                             → suspend / reactivate org
+```
+
+### Org-scoped key routes
+
+```
+GET    /orgs/:orgId/keys                              → list org keys (super-admin)
+GET    /orgs/:orgId/keys/jwks                         → JWKS endpoint (public)
+POST   /orgs/:orgId/keys/rotate                       → rotate org key (super-admin)
+```
+
+### Org-scoped user & role routes (require org_admin session token)
+
+```
+GET    /orgs/:orgId/users                             → list users in org
+POST   /orgs/:orgId/users                             → create user in org
+GET    /orgs/:orgId/users/:userId                     → get user detail + roles
+DELETE /orgs/:orgId/users/:userId                     → remove user from org
+
+GET    /orgs/:orgId/roles                             → list roles
+POST   /orgs/:orgId/roles                             → create custom role
+DELETE /orgs/:orgId/roles/:roleId                     → delete role (non-system only)
+
+POST   /orgs/:orgId/users/:userId/roles               → assign role to user
+DELETE /orgs/:orgId/users/:userId/roles/:roleId       → revoke role from user
+```
+
+### Auth routes
+
+```
+POST   /auth/register                                 → register user
+POST   /auth/login                                    → login, returns session token
+GET    /auth/me                                       → get own profile (requires Bearer token)
+PATCH  /auth/me                                       → update own profile
+POST   /auth/logout                                   → logout
 ```
 
 ---
@@ -227,7 +261,7 @@ auth-idp/
 │   ├── api/                          # Fastify API — hexagonal architecture
 │   │   ├── src/
 │   │   │   ├── modules/
-│   │   │   │   ├── organizations/    # Orgs, roles, user_roles
+│   │   │   │   ├── organizations/    # Orgs, roles, user_roles, org middleware
 │   │   │   │   ├── applications/     # Apps, scopes, SAML/OIDC/JWT configs
 │   │   │   │   ├── users/            # Users, profiles, MFA
 │   │   │   │   ├── keys/             # Per-org signing keys, JWKS
@@ -235,6 +269,7 @@ auth-idp/
 │   │   │   │   └── audit/            # BullMQ + MongoDB audit events
 │   │   │   ├── database/             # Drizzle schema re-exports
 │   │   │   ├── shared/               # Result monad, errors, config, logger
+│   │   │   │   └── types/            # domain-types.ts — KeyAlgorithm, UserStatus etc
 │   │   │   └── server.ts
 │   │   └── drizzle/migrations/
 │   └── admin/                        # Next.js 15 admin dashboard
@@ -279,9 +314,9 @@ auth-idp/
 | M12e | Admin dashboard — Dashboard overview, summary cards | ✅ Complete |
 | M13 | Schema redesign — organizations as master entity, 13 tables | ✅ Complete |
 | M14 | Organizations API — CRUD, keypair bootstrap, org_admin seed | ✅ Complete |
-| **M15** | **Per-org Keys — org-scoped ISigningKeyRepository, JWKS, rotation** | **🔜 Next** |
-| M16 | Users & Roles — org-scoped users, role CRUD, requireOrgAdmin middleware | ⏳ Pending |
-| M17 | Applications & Scopes — org-namespaced apps, scope management | ⏳ Pending |
+| M15 | Per-org Keys — org-scoped keypairs, JWKS, rotation lifecycle | ✅ Complete |
+| M16 | Users & Roles — org-scoped users, role CRUD, requireOrgAdmin middleware | ✅ Complete |
+| **M17** | **Applications & Scopes — org-namespaced apps, scope management** | **🔜 Next** |
 | M18 | Protocol routes restructure — SAML/OIDC/JWT under /orgs/:orgId/... | ⏳ Pending |
 | M19 | Sessions & Audit Logs — org-scoped, tenant-filtered queries | ⏳ Pending |
 | M20 | UI routing restructure — /[orgId]/... dynamic routes, login flow, org switcher | ⏳ Pending |
@@ -329,8 +364,10 @@ auth-idp/
 | `signing_keys organization_id NOT NULL` | Remove `bootstrapSigningKeys` call from `server.ts` — keys are now per-org |
 | `Type 'Boolean' has no call signatures` | Use `isErr(result)` / `isOk(result)` functions, never `result.isErr()` as a method |
 | `generateRSAKeyPair does not exist` | Use `generateKeyPair` — existing port name |
-| `privateKey does not exist on KeyPair` | Use `privateKeyPem` and `publicKeyPem` — existing domain property names |
-| `id does not exist in CreateSigningKeyInput` | Use `kid` at top level, no `id` or `organizationId` — M15 adds org-scoping to keys |
+| `privateKey does not exist on KeyPair` | Use `privateKeyPem` and `publicKeyPem` |
+| `organizationId missing on User` | Add `organizationId` as second constructor param in `User` domain class |
+| `ForbiddenError not found` | Add to `AppError.ts` with `statusCode = 403` and `code = 'FORBIDDEN'` |
+| `request.organizationId is undefined` | Check `OrgAdminMiddleware` sets it after successful auth |
 | SP rejects SAML assertion | Import IDP cert from `/orgs/:orgId/saml/:appId/metadata` into SP trusted certs |
 | `invalid_client` on OIDC token | Wrong `client_secret` or PKCE verifier mismatch |
 | Array default syntax error in migration | Use `sql\`'{}'::text[]\`` for all array defaults in Drizzle schema |

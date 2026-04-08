@@ -3,9 +3,6 @@ import { UnauthorizedError } from '../../../shared/errors/AppError.js'
 import type { ISessionStore } from '../application/ports/ISessionStore.js'
 import { isErr } from '../../../shared/result/Result.js'
 
-declare module 'fastify' {
-  interface FastifyRequest { userId: string; userEmail: string }
-}
 
 export function requireAuth(sessionStore: ISessionStore) {
   return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {

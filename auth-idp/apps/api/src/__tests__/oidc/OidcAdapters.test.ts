@@ -52,7 +52,7 @@ describe('OidcAccountAdapter', () => {
     const { UserProfile } = await import('../../modules/users/domain/UserProfile.js')
     const pino = (await import('pino')).default
 
-    const user = new User('user-123', 'alice@example.com', true, '$hash', 'active', 0, null, new Date(), new Date(), null)
+    const user = new User('user-123', 'org-123', 'alice@example.com', true, '$hash', 'active', 0, null, new Date(), new Date(), null)
     const profile = new UserProfile('user-123', 'Alice', 'Smith', null, null, 'en', 'UTC', {}, new Date())
 
     const mockRepo = {

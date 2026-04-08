@@ -21,6 +21,7 @@ const RegisterUserSchema = z.object({
   password: PasswordSchema,
   givenName: z.string().min(1).max(100).optional(),
   familyName: z.string().min(1).max(100).optional(),
+  organizationId: z.string().uuid().optional(),
 })
 
 export type RegisterUserCmd = z.infer<typeof RegisterUserSchema>
@@ -55,7 +56,7 @@ export class RegisterUserUseCase {
       return err(new ValidationError('Invalid registration data', fields))
     }
 
-    const { email, password, givenName, familyName } = parsed.data
+    const { email, password, givenName, familyName, organizationId } = parsed.data
 
     this.logger.info({ email }, 'User registration attempt')
 
@@ -67,7 +68,13 @@ export class RegisterUserUseCase {
     const hashResult = await this.hash.hash(password)
     if (isErr(hashResult)) return err(hashResult.error)
 
-    const saveResult = await this.repo.save({ email, passwordHash: hashResult.value })
+    // Then use it:
+    const saveResult = await this.repo.save({
+      organizationId: organizationId ?? '',
+      email,
+      passwordHash: hashResult.value,
+    })
+
     if (isErr(saveResult)) return err(saveResult.error)
 
     const user = saveResult.value
