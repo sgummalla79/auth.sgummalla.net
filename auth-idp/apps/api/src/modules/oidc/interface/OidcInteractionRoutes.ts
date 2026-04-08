@@ -3,6 +3,7 @@ import type Provider from 'oidc-provider'
 import { isAppError } from '../../../shared/errors/AppError.js'
 import type { LoginUserUseCase } from '../../users/application/use-cases/LoginUser.js'
 import type { Logger } from '../../../shared/logger/logger.js'
+import { isErr } from '../../../shared/result/Result.js'
 
 interface Deps {
   oidcProvider: Provider
@@ -61,7 +62,7 @@ export async function registerOidcInteractionRoutes(
           password: body.password,
         })
 
-        if (loginResult.isErr()) {
+        if (isErr(loginResult)) {
           const e = loginResult.error
           return reply.status(isAppError(e) ? e.statusCode : 500).send({
             ...(isAppError(e) ? e.toJSON() : { code: 'INTERNAL_ERROR', message: 'Login failed' }),

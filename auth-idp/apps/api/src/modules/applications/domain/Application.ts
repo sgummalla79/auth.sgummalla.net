@@ -1,4 +1,4 @@
-import type { AuthProtocol, ApplicationStatus } from '../../../database/index.js'
+import type { AuthProtocol, ApplicationStatus } from '../../../shared/types/domain-types.js'
 
 export class Application {
   constructor(

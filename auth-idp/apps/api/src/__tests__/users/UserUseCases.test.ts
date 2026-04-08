@@ -14,7 +14,7 @@ function makeUser(): User {
   return new User(
     'user-123', 'test@example.com', false,
     '$argon2id$v=19$m=65536,t=3,p=4$hashedpassword',
-    'pending_verification', 0, null, new Date(), new Date(), null,
+    'active', 0, null, new Date(), new Date(), null,
   )
 }
 

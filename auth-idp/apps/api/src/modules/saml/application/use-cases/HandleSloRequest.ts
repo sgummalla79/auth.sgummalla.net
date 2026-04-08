@@ -1,4 +1,4 @@
-import { err, isErr, isOk } from '../../../../shared/result/Result.js'
+import { err, isErr } from '../../../../shared/result/Result.js'
 import type { Result } from '../../../../shared/result/Result.js'
 import type { AppError } from '../../../../shared/errors/AppError.js'
 import { ValidationError } from '../../../../shared/errors/AppError.js'
@@ -39,7 +39,7 @@ export class HandleSloRequestUseCase {
     // 1. Load app + SAML config
     const appResult = await applicationRepository.findWithConfig(cmd.appId)
     if (isErr(appResult)) return err(appResult.error)
-    const { application, samlConfig } = appResult.value
+    const { samlConfig } = appResult.value
 
     if (!samlConfig) {
       return err(new ValidationError('Application does not have a SAML configuration'))

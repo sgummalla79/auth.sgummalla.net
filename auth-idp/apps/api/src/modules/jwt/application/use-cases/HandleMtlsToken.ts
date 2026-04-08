@@ -1,4 +1,4 @@
-import { ok, err } from '../../../../shared/result/Result.js'
+import { err } from '../../../../shared/result/Result.js'
 import type { Result } from '../../../../shared/result/Result.js'
 import type { AppError } from '../../../../shared/errors/AppError.js'
 import { UnauthorizedError } from '../../../../shared/errors/AppError.js'
@@ -9,7 +9,7 @@ import type { IKeyEncryptionService } from '../../../keys/application/ports/IKey
 import type { ICertThumbprintExtractor } from '../ports/ICertThumbprintExtractor.js'
 import type { IAccessTokenIssuer } from '../ports/IAccessTokenIssuer.js'
 import type { AccessToken } from '../../domain/AccessToken.js'
-import { isOk, isErr } from '../../../../shared/result/Result.js'
+import { isErr } from '../../../../shared/result/Result.js'
 
 export interface HandleMtlsTokenCmd {
   clientCertPem: string

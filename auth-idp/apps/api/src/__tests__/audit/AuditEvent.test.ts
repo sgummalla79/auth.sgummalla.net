@@ -15,6 +15,7 @@ describe('AuditEvent', () => {
       'Mozilla/5.0',
       { email: 'alice@example.com' },
       now,
+      ''
     )
 
     expect(event.id).toBe('evt_123')
@@ -39,6 +40,7 @@ describe('AuditEvent', () => {
       null,
       { reason: 'invalid_password' },
       new Date(),
+      ''
     )
     expect(event.outcome).toBe('failure')
     expect(event.userId).toBeNull()

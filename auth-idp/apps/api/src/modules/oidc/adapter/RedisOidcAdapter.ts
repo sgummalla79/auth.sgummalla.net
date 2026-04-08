@@ -2,6 +2,7 @@ import type { Redis } from 'ioredis'
 import type { Adapter, AdapterPayload } from 'oidc-provider'
 import type { IApplicationRepository } from '../../applications/application/ports/IApplicationRepository.js'
 import type { Logger } from '../../../shared/logger/logger.js'
+import { isErr } from '../../../shared/result/Result.js'
 
 // ─── Module-level dependency store ───────────────────────────────────────────
 // oidc-provider calls `new Adapter(name)` — closures don't survive this.
@@ -58,7 +59,7 @@ export class OidcAdapter implements Adapter {
       const repo = _getRepo()
       const result = await repo.findOidcClientByClientId(id)
 
-      if (result.isErr()) {
+      if (isErr(result)) {
         _logger.debug({ clientId: id }, 'OIDC client not found')
         return undefined
       }

@@ -15,6 +15,7 @@ interface AuditDoc {
   _id: string
   type: AuditEventType
   outcome: AuditOutcome
+  organizationId: string
   userId: string | null
   appId: string | null
   traceId: string | null
@@ -67,6 +68,7 @@ export class MongoAuditRepository implements IAuditRepository {
         _id: id,
         type: event.type,
         outcome: event.outcome,
+        organizationId: event.organizationId ?? '',
         userId: event.userId,
         appId: event.appId,
         traceId: event.traceId,
@@ -79,6 +81,7 @@ export class MongoAuditRepository implements IAuditRepository {
       return ok(new AuditEvent(
         id, event.type, event.outcome, event.userId, event.appId,
         event.traceId, event.ipAddress, event.userAgent, event.metadata, event.occurredAt,
+        event.organizationId ?? '',   // ← ADD
       ))
     } catch (e) {
       return err(new DatabaseError('Failed to save audit event', e))
@@ -125,6 +128,7 @@ export class MongoAuditRepository implements IAuditRepository {
     return new AuditEvent(
       doc._id, doc.type, doc.outcome, doc.userId, doc.appId,
       doc.traceId, doc.ipAddress, doc.userAgent, doc.metadata, doc.occurredAt,
+      doc.organizationId ?? '',   // ← ADD
     )
   }
 }

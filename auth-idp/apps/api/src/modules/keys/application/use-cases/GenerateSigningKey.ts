@@ -1,5 +1,5 @@
 import { randomBytes } from 'crypto'
-import { ok, err, isErr, isOk } from '../../../../shared/result/Result.js'
+import { ok, err, isErr } from '../../../../shared/result/Result.js'
 import type { Result } from '../../../../shared/result/Result.js'
 import type { AppError } from '../../../../shared/errors/AppError.js'
 import { ConflictError } from '../../../../shared/errors/AppError.js'
@@ -64,19 +64,17 @@ export class GenerateSigningKeyUseCase {
 
     const saveResult = await this.repo.save({
       kid,
+      organizationId:      '',           // ← placeholder until M15
       algorithm,
-      use: 'sig',
-      status: 'active',
-      publicKeyPem: keyPairResult.value.publicKeyPem,
+      status:              'active',
+      publicKeyPem:        keyPairResult.value.publicKeyPem,
+      publicKeyJwk:        '',           // ← placeholder until M15
       encryptedPrivateKey: encryptResult.value.ciphertext,
-      encryptionIv: encryptResult.value.iv,
+      encryptionIv:        encryptResult.value.iv,
       expiresAt,
     })
-
     if (isErr(saveResult)) return err(saveResult.error)
-
-    await this.cache.invalidate()
-
+    await this.cache.invalidate()      // ← organizationId placeholder
     this.logger.info({ kid, expiresAt }, 'Signing key generated')
     return ok(saveResult.value)
   }
