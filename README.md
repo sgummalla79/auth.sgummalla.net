@@ -17,6 +17,7 @@ Built with Node.js, TypeScript, Fastify, Supabase (Postgres), Redis Cloud, and M
 - [Running the Project](#running-the-project)
 - [Database Schema](#database-schema)
 - [Multi-Tenancy Model](#multi-tenancy-model)
+- [API Reference](#api-reference)
 - [Project Structure](#project-structure)
 - [Module Status](#module-status)
 - [Tech Stack](#tech-stack)
@@ -135,7 +136,7 @@ ADMIN_API_KEY=<random string>
 node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 ```
 
-Run this three times — once each for `JWT_SECRET`, `SESSION_SECRET`, and `KEY_ENCRYPTION_SECRET`.
+Run three times — once each for `JWT_SECRET`, `SESSION_SECRET`, and `KEY_ENCRYPTION_SECRET`.
 
 ---
 
@@ -143,12 +144,10 @@ Run this three times — once each for `JWT_SECRET`, `SESSION_SECRET`, and `KEY_
 
 ```bash
 # API server
-cd apps/api
-pnpm dev
+cd apps/api && pnpm dev
 
 # Admin dashboard
-cd apps/admin
-pnpm dev
+cd apps/admin && pnpm dev
 
 # Health check
 curl http://localhost:3000/health | jq
@@ -179,9 +178,8 @@ curl http://localhost:3000/health | jq
 ### Schema Change Workflow
 
 ```bash
-# After editing any schema file:
-pnpm db:generate   # generates SQL migration
-pnpm db:migrate    # applies to Supabase
+pnpm db:generate   # generates SQL migration from schema changes
+pnpm db:migrate    # applies migration to Supabase
 ```
 
 ---
@@ -202,17 +200,22 @@ organizations  ← master entity
   └── audit_logs     (org-scoped, isolated per tenant — stored in MongoDB)
 ```
 
-**Key isolation rules:**
-- Each org gets its own RSA keypair — SAML assertions and OIDC tokens are signed with the org's key only
-- User email is unique per org (same email can exist in two different orgs)
-- Application slug is unique per org
-- Rotating one org's key has zero effect on other orgs
+**Key isolation:** Each org gets its own RSA keypair. SAML assertions and OIDC tokens are signed with the org's key only. Rotating one org's key has zero effect on other orgs.
 
-**Roles:**
-- Global to the org — a user's roles apply across all applications in that org
-- `org_admin` is a system role (seeded on org creation, cannot be deleted)
-- Org admins can manage applications, users, roles, and scopes within their org
-- One user can be org_admin for multiple orgs — org switcher in the UI
+**Roles:** Global to the org — a user's roles apply across all applications in that org. `org_admin` is a system role seeded on org creation and cannot be deleted. One user can be org_admin for multiple orgs.
+
+---
+
+## API Reference
+
+### Super-admin routes (require `x-admin-key: $ADMIN_API_KEY` header)
+
+```
+POST   /admin/orgs              → create org + generate keypair + seed org_admin role
+GET    /admin/orgs              → list all orgs
+GET    /admin/orgs/:orgId       → get org detail
+PATCH  /admin/orgs/:orgId       → suspend / reactivate org
+```
 
 ---
 
@@ -244,8 +247,7 @@ auth-idp/
 │           │   ├── keys/
 │           │   ├── sessions/
 │           │   └── audit-logs/
-│           ├── admin/                # Super-admin pages
-│           │   └── orgs/
+│           ├── admin/orgs/           # Super-admin pages
 │           ├── login/
 │           └── org-select/
 ├── packages/types/
@@ -275,9 +277,9 @@ auth-idp/
 | M12c | Admin dashboard — User management, MFA status, force-logout | ✅ Complete |
 | M12d | Admin dashboard — Audit log viewer, filters, pagination | ✅ Complete |
 | M12e | Admin dashboard — Dashboard overview, summary cards | ✅ Complete |
-| **M13** | **Schema redesign — organizations as master entity, 13 tables** | **✅ Complete** |
-| M14 | Organizations API — CRUD, org creation, keypair bootstrap, org_admin seed | 🔜 Next |
-| M15 | Per-org Keys — org-scoped keypairs, JWKS, rotation lifecycle | ⏳ Pending |
+| M13 | Schema redesign — organizations as master entity, 13 tables | ✅ Complete |
+| M14 | Organizations API — CRUD, keypair bootstrap, org_admin seed | ✅ Complete |
+| **M15** | **Per-org Keys — org-scoped ISigningKeyRepository, JWKS, rotation** | **🔜 Next** |
 | M16 | Users & Roles — org-scoped users, role CRUD, requireOrgAdmin middleware | ⏳ Pending |
 | M17 | Applications & Scopes — org-namespaced apps, scope management | ⏳ Pending |
 | M18 | Protocol routes restructure — SAML/OIDC/JWT under /orgs/:orgId/... | ⏳ Pending |
@@ -323,17 +325,17 @@ auth-idp/
 | `Invalid environment variables` | All vars in `.env` must be set |
 | `Redis max retries reached` | Use `rediss://` (double s) from Redis Cloud |
 | `MongoDB not connected` | Check Atlas Network Access — add your IP |
-| `401` on admin routes | Exact `ADMIN_API_KEY` — no quotes, no spaces |
+| `401` on admin routes | Exact `ADMIN_API_KEY` in `x-admin-key` header — no quotes, no spaces |
 | `signing_keys organization_id NOT NULL` | Remove `bootstrapSigningKeys` call from `server.ts` — keys are now per-org |
+| `Type 'Boolean' has no call signatures` | Use `isErr(result)` / `isOk(result)` functions, never `result.isErr()` as a method |
+| `generateRSAKeyPair does not exist` | Use `generateKeyPair` — existing port name |
+| `privateKey does not exist on KeyPair` | Use `privateKeyPem` and `publicKeyPem` — existing domain property names |
+| `id does not exist in CreateSigningKeyInput` | Use `kid` at top level, no `id` or `organizationId` — M15 adds org-scoping to keys |
 | SP rejects SAML assertion | Import IDP cert from `/orgs/:orgId/saml/:appId/metadata` into SP trusted certs |
 | `invalid_client` on OIDC token | Wrong `client_secret` or PKCE verifier mismatch |
-| JWT assertion `UNAUTHORIZED` | `client_id` must be the app UUID, not the slug |
-| mTLS thumbprint mismatch | Strip with `sed 's/.*Fingerprint=//;s/://g'` — no prefix, lowercase |
-| TOTP always invalid | Clock skew — generate and submit within the same 30s window |
+| Array default syntax error in migration | Use `sql\`'{}'::text[]\`` for all array defaults in Drizzle schema |
 | Audit events not appearing | BullMQ is async — wait 2s after action before querying |
 | BullMQ eviction warning | Set Redis eviction policy to `noeviction` in Redis Cloud settings |
-| Array default syntax error in migration | Use `sql\`'{}'::text[]\`` for all array defaults in Drizzle schema |
-| Admin dashboard login fails | Ensure `API_BASE_URL` in `apps/admin/.env` matches running API |
 
 ---
 

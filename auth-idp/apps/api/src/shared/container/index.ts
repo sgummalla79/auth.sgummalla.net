@@ -36,6 +36,9 @@ import { BullmqAuditLogger } from '../../modules/audit/infrastructure/BullmqAudi
 import { AuditWorker } from '../../modules/audit/worker/AuditWorker.js'
 import { QueryAuditEventsUseCase } from '../../modules/audit/application/use-cases/QueryAuditEvents.js'
 import { GetAuditEventUseCase } from '../../modules/audit/application/use-cases/GetAuditEvent.js'
+import type { IOrganizationRepository } from '../../modules/organizations/application/ports/IOrganizationRepository.js'
+import type { CreateOrganizationUseCase } from '../../modules/organizations/application/use-cases/CreateOrganization.js'
+import type { GetOrganizationUseCase, ListOrganizationsUseCase, UpdateOrganizationUseCase } from '../../modules/organizations/application/use-cases/GetOrganization.js'
 
 import type { Env } from '../config/env.js'
 import type { Db } from 'mongodb'
@@ -129,6 +132,12 @@ export interface Cradle {
   auditWorker: AuditWorker
   queryAuditEventsUseCase: QueryAuditEventsUseCase
   getAuditEventUseCase: GetAuditEventUseCase
+  //Organizations
+  organizationRepository: IOrganizationRepository
+  createOrganizationUseCase: CreateOrganizationUseCase
+  getOrganizationUseCase: GetOrganizationUseCase
+  listOrganizationsUseCase: ListOrganizationsUseCase
+  updateOrganizationUseCase: UpdateOrganizationUseCase
 }
 
 export type AppContainer = AwilixContainer<Cradle>

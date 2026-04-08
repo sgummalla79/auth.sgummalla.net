@@ -21,6 +21,7 @@ import { registerMfaModule } from './modules/mfa/index.js'
 import { registerSessionModule } from './modules/sessions/index.js'
 import { registerAuditModule } from './modules/audit/index.js'
 import { registerAdminUserRoutes } from './modules/users/interface/AdminUserRoutes.js'
+import { registerOrganizationModule, registerOrganizationRoutes } from './modules/organizations/index.js'
 
 const logger = createLogger('app')
 
@@ -58,6 +59,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   registerKeyModule(container)
   registerUserModule(container)
   registerApplicationModule(container)
+  registerOrganizationModule(container)
   await registerOidcModule(app, container) 
   await registerSamlModule(app)
   await registerJwtAuthModule(app)
@@ -121,6 +123,8 @@ export async function buildApp(): Promise<FastifyInstance> {
     updateApplicationUseCase: container.cradle.updateApplicationUseCase,
     config: container.cradle.config,
   })
+
+  await registerOrganizationRoutes(app, container)
 
   app.get('/health', async (_request: FastifyRequest, reply: FastifyReply) => {
     const [postgres, redis, mongodb] = await Promise.all([
