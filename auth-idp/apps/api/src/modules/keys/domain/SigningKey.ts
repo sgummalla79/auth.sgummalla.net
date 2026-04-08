@@ -1,4 +1,4 @@
-import type { KeyAlgorithm, KeyStatus, KeyUse } from '../../../database/index.js'
+import type { KeyAlgorithm, KeyStatus, KeyUse } from '../../../shared/types/domain-types.js'
 
 export class SigningKey {
   constructor(

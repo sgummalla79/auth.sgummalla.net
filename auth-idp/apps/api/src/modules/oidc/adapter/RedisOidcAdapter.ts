@@ -1,4 +1,4 @@
-import type Redis from 'ioredis'
+import type { Redis } from 'ioredis'
 import type { Adapter, AdapterPayload } from 'oidc-provider'
 import type { IApplicationRepository } from '../../applications/application/ports/IApplicationRepository.js'
 import type { Logger } from '../../../shared/logger/logger.js'

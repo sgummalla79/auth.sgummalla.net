@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { RegisterApplicationUseCase } from '../../modules/applications/application/use-cases/RegisterApplication.js'
-import { ok, err } from '../../shared/result/Result.js'
+import { ok, err, isOk, isErr } from '../../shared/result/Result.js'
 import { ConflictError, NotFoundError } from '../../shared/errors/AppError.js'
 import { Application } from '../../modules/applications/domain/Application.js'
 import pino from 'pino'
@@ -36,7 +36,7 @@ describe('RegisterApplicationUseCase', () => {
       protocol: 'saml', name: 'Test App',
       saml: { entityId: 'https://sp.example.com/metadata', acsUrl: 'https://sp.example.com/acs' },
     })
-    expect(result.isOk()).toBe(true)
+    expect(isOk(result)).toBe(true)
     expect(mockRepo.saveSamlConfig).toHaveBeenCalled()
   })
 
@@ -46,8 +46,8 @@ describe('RegisterApplicationUseCase', () => {
       protocol: 'oidc', name: 'Test App',
       oidc: { redirectUris: ['https://app.example.com/callback'] },
     })
-    expect(result.isOk()).toBe(true)
-    expect(result.value!.oidcClientSecret).toBe('secret_xyz789')
+    expect(isOk(result)).toBe(true)
+    if (isOk(result)) expect(result.value.oidcClientSecret).toBe('secret_xyz789')
     expect(mockHash.hash).toHaveBeenCalledWith('secret_xyz789')
   })
 
@@ -57,7 +57,7 @@ describe('RegisterApplicationUseCase', () => {
       protocol: 'jwt', name: 'Test App',
       jwt: { publicKey: '-----BEGIN PUBLIC KEY-----\ntest\n-----END PUBLIC KEY-----', audience: ['https://api.example.com'] },
     })
-    expect(result.isOk()).toBe(true)
+    expect(isOk(result)).toBe(true)
     expect(mockRepo.saveJwtConfig).toHaveBeenCalled()
   })
 
@@ -67,8 +67,8 @@ describe('RegisterApplicationUseCase', () => {
       protocol: 'saml', name: 'Test App',
       saml: { entityId: 'https://sp.example.com', acsUrl: 'https://sp.example.com/acs' },
     })
-    expect(result.isErr()).toBe(true)
-    expect(result.error).toBeInstanceOf(ConflictError)
+    expect(isErr(result)).toBe(true)
+    if (isErr(result)) expect(result.error).toBeInstanceOf(ConflictError)
   })
 
   it('rejects invalid ACS URL', async () => {
@@ -76,16 +76,16 @@ describe('RegisterApplicationUseCase', () => {
       protocol: 'saml', name: 'Test App',
       saml: { entityId: 'https://sp.example.com', acsUrl: 'not-a-url' },
     })
-    expect(result.isErr()).toBe(true)
-    expect(result.error!.code).toBe('VALIDATION_ERROR')
+    expect(isErr(result)).toBe(true)
+    if (isErr(result)) expect(result.error.code).toBe('VALIDATION_ERROR')
   })
 
   it('rejects empty OIDC redirect URIs', async () => {
     const result = await useCase.execute({
       protocol: 'oidc', name: 'Test App', oidc: { redirectUris: [] },
     })
-    expect(result.isErr()).toBe(true)
-    expect(result.error!.code).toBe('VALIDATION_ERROR')
+    expect(isErr(result)).toBe(true)
+    if (isErr(result)) expect(result.error.code).toBe('VALIDATION_ERROR')
   })
 })
 

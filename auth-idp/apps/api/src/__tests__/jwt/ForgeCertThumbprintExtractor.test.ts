@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { ForgeCertThumbprintExtractor } from '../../modules/jwt/infrastructure/ForgeCertThumbprintExtractor.js'
+import { isOk, isErr } from '../../shared/result/Result.js'
 
 const TEST_CERT = `-----BEGIN CERTIFICATE-----
 MIIC/zCCAeegAwIBAgIUIyp08Po1w8ucSJcu39GmoIKksyQwDQYJKoZIhvcNAQEL
@@ -26,8 +27,8 @@ describe('ForgeCertThumbprintExtractor', () => {
 
   it('returns a 40-char hex thumbprint for a valid cert', () => {
     const result = extractor.extract(TEST_CERT)
-    expect(result.isOk()).toBe(true)
-    if (result.isOk()) {
+    expect(isOk(result)).toBe(true)
+    if (isOk(result)) {
       expect(result.value).toMatch(/^[a-f0-9]{40}$/)
     }
   })
@@ -35,16 +36,16 @@ describe('ForgeCertThumbprintExtractor', () => {
   it('returns the same thumbprint on repeated calls (deterministic)', () => {
     const r1 = extractor.extract(TEST_CERT)
     const r2 = extractor.extract(TEST_CERT)
-    expect(r1.isOk() && r2.isOk()).toBe(true)
-    if (r1.isOk() && r2.isOk()) {
+    expect(isOk(r1) && isOk(r2)).toBe(true)
+    if (isOk(r1) && isOk(r2)) {
       expect(r1.value).toBe(r2.value)
     }
   })
 
   it('returns UnauthorizedError for invalid PEM', () => {
     const result = extractor.extract('not a cert')
-    expect(result.isErr()).toBe(true)
-    if (result.isErr()) {
+    expect(isErr(result)).toBe(true)
+    if (isErr(result)) {
       expect(result.error.code).toBe('UNAUTHORIZED')
     }
   })

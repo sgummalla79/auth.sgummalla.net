@@ -2,7 +2,7 @@ import { ok, err } from '../../../shared/result/Result.js'
 import type { Result } from '../../../shared/result/Result.js'
 import { CacheError } from '../../../shared/errors/AppError.js'
 import type { Logger } from '../../../shared/logger/logger.js'
-import type Redis from 'ioredis'
+import type { Redis } from 'ioredis'
 import type { IKeyCache, CachedKeyRow } from '../application/ports/IKeyCache.js'
 
 const CACHE_KEY = 'idp:keys:active:sig'

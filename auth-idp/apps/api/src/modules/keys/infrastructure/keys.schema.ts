@@ -7,7 +7,7 @@ import {
   index,
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
-import { organizations } from '../../organizations/infrastructure/organizations.schema'
+import { organizations } from '../../organizations/infrastructure/organizations.schema.js'
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 

@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import type { Cradle } from '../../../shared/container/index.js'
+import { isOk, isErr } from '../../../shared/result/Result.js'
 
 // ─── HTML helpers ─────────────────────────────────────────────────────────────
 
@@ -85,7 +86,7 @@ export async function registerSamlRoutes(app: FastifyInstance): Promise<void> {
       const { getIdpMetadataUseCase } = request.container.cradle as Cradle
 
       const result = await getIdpMetadataUseCase.execute(request.params.appId)
-      if (result.isErr()) throw result.error
+      if (isErr(result)) throw result.error
 
       return reply
         .header('Content-Type', 'application/xml; charset=utf-8')
@@ -115,7 +116,7 @@ export async function registerSamlRoutes(app: FastifyInstance): Promise<void> {
       const sessionToken = request.cookies[SESSION_COOKIE]
       if (sessionToken) {
         const sessionResult = await sessionStore.get(sessionToken)
-        if (sessionResult.isOk()) {
+        if (isOk(sessionResult)) {
           const { userId } = sessionResult.value
 
           const result = await handleSsoRequestUseCase.execute({
@@ -125,7 +126,7 @@ export async function registerSamlRoutes(app: FastifyInstance): Promise<void> {
             userId,
           })
 
-          if (result.isErr()) throw result.error
+          if (isErr(result)) throw result.error
 
           const { endpoint, samlResponse: samlResp, relayState: relay } = result.value
           return reply
@@ -144,7 +145,7 @@ export async function registerSamlRoutes(app: FastifyInstance): Promise<void> {
         createdAt: Date.now(),
       })
 
-      if (storeResult.isErr()) throw storeResult.error
+      if (isErr(storeResult)) throw storeResult.error
 
       const nonce = storeResult.value
       return reply
@@ -189,7 +190,7 @@ export async function registerSamlRoutes(app: FastifyInstance): Promise<void> {
 
       // 1. Retrieve (and consume) the pending SAML request
       const stateResult = await samlStateStore.consume(pendingNonce)
-      if (stateResult.isErr()) {
+      if (isErr(stateResult)) {
         return reply
           .header('Content-Type', 'text/html; charset=utf-8')
           .send(buildLoginPage(appId, '', 'Your login session has expired. Please return to the application and try again.'))
@@ -199,12 +200,12 @@ export async function registerSamlRoutes(app: FastifyInstance): Promise<void> {
 
       // 2. Authenticate the user
       const loginResult = await loginUserUseCase.execute({ email, password })
-      if (loginResult.isErr()) {
+      if (isErr(loginResult)) {
         // Restore the pending state so the user can try again
         await samlStateStore.save({ samlRequest, relayState, appId, createdAt: Date.now() })
         // Re-issue the nonce — we need a fresh one since we consumed the old one
         const restoreResult = await samlStateStore.save({ samlRequest, relayState, appId, createdAt: Date.now() })
-        const freshNonce = restoreResult.isOk() ? restoreResult.value : ''
+        const freshNonce = isOk(restoreResult) ? restoreResult.value : ''
 
         const message = loginResult.error.code === 'UNAUTHORIZED'
           ? 'Invalid email or password.'
@@ -232,10 +233,10 @@ export async function registerSamlRoutes(app: FastifyInstance): Promise<void> {
         relayState,
         userId,
       })
-      if (ssoResult.isErr()) throw ssoResult.error
+      if (isErr(ssoResult)) throw ssoResult.error
 
       // Add app to SSO session
-      if (ssoSessionResult.isOk()) {
+      if (isOk(ssoSessionResult)) {
         const { addParticipatingAppUseCase } = request.container.cradle as Cradle
         await addParticipatingAppUseCase.execute({
           sessionId: ssoSessionResult.value.id,
@@ -283,7 +284,7 @@ export async function registerSamlRoutes(app: FastifyInstance): Promise<void> {
         relayState,
         sessionToken,
       })
-      if (result.isErr()) throw result.error
+      if (isErr(result)) throw result.error
 
       const { endpoint, samlResponse: samlResp, relayState: relay } = result.value
 

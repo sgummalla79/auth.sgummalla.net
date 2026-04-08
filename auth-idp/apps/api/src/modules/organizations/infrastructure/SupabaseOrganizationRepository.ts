@@ -1,5 +1,5 @@
 import { eq, and } from 'drizzle-orm'
-import { ok, err, fromPromise } from '../../../shared/result/Result.js'
+import { ok, err, fromPromise, isErr, isOk } from '../../../shared/result/Result.js'
 import type { Result } from '../../../shared/result/Result.js'
 import { NotFoundError, InternalError } from '../../../shared/errors/AppError.js'
 import type { AppError } from '../../../shared/errors/AppError.js'
@@ -35,7 +35,7 @@ export class SupabaseOrganizationRepository implements IOrganizationRepository {
         .returning(),
       (e) => new InternalError('Failed to save organization', e),
     )
-    if (result.isErr()) return err(result.error)
+    if (isErr(result)) return err(result.error)
     const row = result.value[0]
     if (!row) return err(new InternalError('No row returned after insert'))
     return ok(this.toOrganization(row))
@@ -46,7 +46,7 @@ export class SupabaseOrganizationRepository implements IOrganizationRepository {
       this.deps.db.select().from(organizations).where(eq(organizations.id, id)).limit(1),
       (e) => new InternalError('Failed to query organization', e),
     )
-    if (result.isErr()) return err(result.error)
+    if (isErr(result)) return err(result.error)
     const row = result.value[0]
     if (!row) return err(new NotFoundError(`Organization ${id} not found`))
     return ok(this.toOrganization(row))
@@ -57,7 +57,7 @@ export class SupabaseOrganizationRepository implements IOrganizationRepository {
       this.deps.db.select().from(organizations).where(eq(organizations.slug, slug)).limit(1),
       (e) => new InternalError('Failed to query organization by slug', e),
     )
-    if (result.isErr()) return err(result.error)
+    if (isErr(result)) return err(result.error)
     const row = result.value[0]
     if (!row) return err(new NotFoundError(`Organization with slug "${slug}" not found`))
     return ok(this.toOrganization(row))
@@ -68,7 +68,7 @@ export class SupabaseOrganizationRepository implements IOrganizationRepository {
       this.deps.db.select().from(organizations),
       (e) => new InternalError('Failed to list organizations', e),
     )
-    if (result.isErr()) return err(result.error)
+    if (isErr(result)) return err(result.error)
     return ok(result.value.map((r) => this.toOrganization(r)))
   }
 
@@ -81,7 +81,7 @@ export class SupabaseOrganizationRepository implements IOrganizationRepository {
         .returning(),
       (e) => new InternalError('Failed to update organization', e),
     )
-    if (result.isErr()) return err(result.error)
+    if (isErr(result)) return err(result.error)
     const row = result.value[0]
     if (!row) return err(new NotFoundError(`Organization ${id} not found`))
     return ok(this.toOrganization(row))
@@ -101,7 +101,7 @@ export class SupabaseOrganizationRepository implements IOrganizationRepository {
         .returning(),
       (e) => new InternalError('Failed to save role', e),
     )
-    if (result.isErr()) return err(result.error)
+    if (isErr(result)) return err(result.error)
     const row = result.value[0]
     if (!row) return err(new InternalError('No row returned after role insert'))
     return ok(this.toRole(row))
@@ -116,7 +116,7 @@ export class SupabaseOrganizationRepository implements IOrganizationRepository {
         .limit(1),
       (e) => new InternalError('Failed to query role', e),
     )
-    if (result.isErr()) return err(result.error)
+    if (isErr(result)) return err(result.error)
     const row = result.value[0]
     if (!row) return err(new NotFoundError(`Role "${name}" not found in org ${organizationId}`))
     return ok(this.toRole(row))
@@ -127,7 +127,7 @@ export class SupabaseOrganizationRepository implements IOrganizationRepository {
       this.deps.db.select().from(roles).where(eq(roles.organizationId, organizationId)),
       (e) => new InternalError('Failed to list roles', e),
     )
-    if (result.isErr()) return err(result.error)
+    if (isErr(result)) return err(result.error)
     return ok(result.value.map((r) => this.toRole(r)))
   }
 
@@ -141,23 +141,23 @@ export class SupabaseOrganizationRepository implements IOrganizationRepository {
       }),
       (e) => new InternalError('Failed to assign role', e),
     )
-    if (result.isErr()) return err(result.error)
+    if (isErr(result)) return err(result.error)
     return ok(undefined)
   }
 
   // ─── Mappers ────────────────────────────────────────────────────────────────
 
-private toOrganization(row: typeof organizations.$inferSelect): Organization {
-  return new Organization(
-    row.id, row.name, row.slug, row.status,
-    row.logoUrl, row.createdAt, row.updatedAt,
-  )
-}
+  private toOrganization(row: typeof organizations.$inferSelect): Organization {
+    return new Organization(
+      row.id, row.name, row.slug, row.status,
+      row.logoUrl, row.createdAt, row.updatedAt,
+    )
+  }
 
-private toRole(row: typeof roles.$inferSelect): Role {
-  return new Role(
-    row.id, row.organizationId, row.name,
-    row.description, row.isSystem, row.createdAt,
-  )
-}
+  private toRole(row: typeof roles.$inferSelect): Role {
+    return new Role(
+      row.id, row.organizationId, row.name,
+      row.description, row.isSystem, row.createdAt,
+    )
+  }
 }

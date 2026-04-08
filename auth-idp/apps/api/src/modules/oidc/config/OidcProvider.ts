@@ -1,6 +1,6 @@
 import Provider from 'oidc-provider'
 import type { Configuration } from 'oidc-provider'
-import type Redis from 'ioredis'
+import type { Redis } from 'ioredis'
 import { importPKCS8, exportJWK } from 'jose'
 import type { Env } from '../../../shared/config/env.js'
 import type { IUserRepository } from '../../users/application/ports/IUserRepository.js'

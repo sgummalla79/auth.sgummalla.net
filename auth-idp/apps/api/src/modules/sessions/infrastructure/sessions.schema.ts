@@ -6,8 +6,8 @@ import {
   timestamp,
   index,
 } from 'drizzle-orm/pg-core'
-import { organizations } from '../../organizations/infrastructure/organizations.schema'
-import { users } from '../../users/infrastructure/users.schema'
+import { organizations } from '../../organizations/infrastructure/organizations.schema.js'
+import { users } from '../../users/infrastructure/users.schema.js'
 import { sql } from 'drizzle-orm'
 
 // ─── Enums ────────────────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { RegisterUserUseCase } from '../../modules/users/application/use-cases/RegisterUser.js'
 import { LoginUserUseCase } from '../../modules/users/application/use-cases/LoginUser.js'
-import { ok, err } from '../../shared/result/Result.js'
+import { ok, err, isErr, isOk } from '../../shared/result/Result.js'
 import { ConflictError, NotFoundError, UnauthorizedError } from '../../shared/errors/AppError.js'
 import { User } from '../../modules/users/domain/User.js'
 import pino from 'pino'
@@ -35,27 +35,27 @@ describe('RegisterUserUseCase', () => {
 
   it('registers a new user successfully', async () => {
     const result = await useCase.execute({ email: 'new@example.com', password: 'Password1' })
-    expect(result.isOk()).toBe(true)
+    expect(isOk(result)).toBe(true)
     expect(mockHash.hash).toHaveBeenCalledWith('Password1')
   })
 
   it('returns conflict when email already exists', async () => {
     mockRepo.findByEmail.mockResolvedValue(ok(makeUser()))
     const result = await useCase.execute({ email: 'existing@example.com', password: 'Password1' })
-    expect(result.isErr()).toBe(true)
-    if (result.isErr()) expect(result.error).toBeInstanceOf(ConflictError)
+    expect(isErr(result)).toBe(true)
+    if (isErr(result)) expect(result.error).toBeInstanceOf(ConflictError)
   })
 
   it('rejects weak passwords', async () => {
     const result = await useCase.execute({ email: 'test@example.com', password: 'weak' })
-    expect(result.isErr()).toBe(true)
-    if (result.isErr()) expect(result.error.code).toBe('VALIDATION_ERROR')
+    expect(isErr(result)).toBe(true)
+    if (isErr(result)) expect(result.error.code).toBe('VALIDATION_ERROR')
   })
 
   it('rejects invalid email', async () => {
     const result = await useCase.execute({ email: 'not-an-email', password: 'Password1' })
-    expect(result.isErr()).toBe(true)
-    if (result.isErr()) expect(result.error.code).toBe('VALIDATION_ERROR')
+    expect(isErr(result)).toBe(true)
+    if (isErr(result)) expect(result.error.code).toBe('VALIDATION_ERROR')
   })
 
   it('lowercases email', async () => {
@@ -91,23 +91,23 @@ describe('LoginUserUseCase', () => {
 
   it('returns session token on valid credentials', async () => {
     const result = await useCase.execute({ email: 'test@example.com', password: 'Password1' })
-    expect(result.isOk()).toBe(true)
-    if (result.isOk()) expect(result.value.sessionToken).toBe('session-token-abc')
+    expect(isOk(result)).toBe(true)
+    if (isOk(result)) expect(result.value.sessionToken).toBe('session-token-abc')
   })
 
   it('returns unauthorized on wrong password', async () => {
     mockHash.verify.mockResolvedValue(ok(false))
     const result = await useCase.execute({ email: 'test@example.com', password: 'Wrong1' })
-    expect(result.isErr()).toBe(true)
-    if (result.isErr()) expect(result.error).toBeInstanceOf(UnauthorizedError)
+    expect(isErr(result)).toBe(true)
+    if (isErr(result)) expect(result.error).toBeInstanceOf(UnauthorizedError)
     expect(mockRepo.incrementFailedLogins).toHaveBeenCalled()
   })
 
   it('returns unauthorized for unknown email', async () => {
     mockRepo.findByEmail.mockResolvedValue(err(new NotFoundError('not found')))
     const result = await useCase.execute({ email: 'unknown@example.com', password: 'Password1' })
-    expect(result.isErr()).toBe(true)
-    if (result.isErr()) expect(result.error).toBeInstanceOf(UnauthorizedError)
+    expect(isErr(result)).toBe(true)
+    if (isErr(result)) expect(result.error).toBeInstanceOf(UnauthorizedError)
   })
 
   it('returns unauthorized for locked account', async () => {
@@ -116,8 +116,8 @@ describe('LoginUserUseCase', () => {
       new Date(), new Date(), null)
     mockRepo.findByEmail.mockResolvedValue(ok(lockedUser))
     const result = await useCase.execute({ email: 'test@example.com', password: 'Password1' })
-    expect(result.isErr()).toBe(true)
-    if (result.isErr()) expect(result.error.message).toContain('locked')
+    expect(isErr(result)).toBe(true)
+    if (isErr(result)) expect(result.error.message).toContain('locked')
   })
 
   it('locks account after 5 failed attempts', async () => {
@@ -131,7 +131,7 @@ describe('LoginUserUseCase', () => {
 
   it('resets failed attempts on success', async () => {
     const result = await useCase.execute({ email: 'test@example.com', password: 'Password1' })
-    expect(result.isOk()).toBe(true)
+    expect(isOk(result)).toBe(true)
     expect(mockRepo.resetFailedLogins).toHaveBeenCalledWith('user-123')
   })
 })
