@@ -1,4 +1,4 @@
-import { err } from '../../../../shared/result/Result.js'
+import { err, isErr, isOk } from '../../../../shared/result/Result.js'
 import type { Result } from '../../../../shared/result/Result.js'
 import type { AppError } from '../../../../shared/errors/AppError.js'
 import { ValidationError } from '../../../../shared/errors/AppError.js'
@@ -39,7 +39,7 @@ export class HandleSsoRequestUseCase {
 
     // 1. Load app + SAML config
     const appResult = await applicationRepository.findWithConfig(cmd.appId)
-    if (appResult.isErr()) return err(appResult.error)
+    if (isErr(appResult)) return err(appResult.error)
     const { application, samlConfig } = appResult.value
 
     if (!samlConfig) {
@@ -54,8 +54,8 @@ export class HandleSsoRequestUseCase {
       userRepository.findById(cmd.userId),
       userRepository.findProfile(cmd.userId),
     ])
-    if (userResult.isErr()) return err(userResult.error)
-    if (profileResult.isErr()) return err(profileResult.error)
+    if (isErr(userResult)) return err(userResult.error)
+    if (isErr(profileResult)) return err(profileResult.error)
 
     const user = userResult.value
     const profile = profileResult.value
@@ -74,21 +74,21 @@ export class HandleSsoRequestUseCase {
 
     // 4. Active signing key → decrypt → cert
     const keyResult = await signingKeyRepository.findActiveSigningKey()
-    if (keyResult.isErr()) return err(keyResult.error)
+    if (isErr(keyResult)) return err(keyResult.error)
     const signingKey = keyResult.value
 
     const decryptResult = await keyEncryptionService.decrypt(
       signingKey.encryptedPrivateKey,
       signingKey.encryptionIv,
     )
-    if (decryptResult.isErr()) return err(decryptResult.error)
+    if (isErr(decryptResult)) return err(decryptResult.error)
 
     const certResult = await samlCertificateService.generateOrGetCert(
       signingKey.kid,
       decryptResult.value,
       signingKey.publicKeyPem,
     )
-    if (certResult.isErr()) return err(certResult.error)
+    if (isErr(certResult)) return err(certResult.error)
 
     logger.info({ appId: cmd.appId, userId: cmd.userId, kid: signingKey.kid }, 'Creating SAML SSO response')
 

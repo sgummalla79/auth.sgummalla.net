@@ -5,10 +5,11 @@ import type { AppError } from '../../../../shared/errors/AppError.js'
 import { ValidationError, ConflictError } from '../../../../shared/errors/AppError.js'
 import type { Logger } from '../../../../shared/logger/logger.js'
 import type { IHashService } from '../../../users/application/ports/IHashService.js'
-import type { Application, SamlConfig, OidcClient, JwtConfig } from '../domain/Application.js'
+import type { Application, SamlConfig, OidcClient, JwtConfig } from '../../domain/Application.js'
 import type { IApplicationRepository } from '../ports/IApplicationRepository.js'
 import type { ISlugGenerator } from '../ports/ISlugGenerator.js'
 import type { ICredentialGenerator } from '../ports/ICredentialGenerator.js'
+import { isOk, isErr } from '../../../../shared/result/Result.js'
 
 const SamlInputSchema = z.object({
   entityId: z.string().url('Entity ID must be a valid URI'),
@@ -102,7 +103,7 @@ export class RegisterApplicationUseCase {
     const slug = this.slugs.generate(data.name)
 
     const existing = await this.repo.findBySlug(slug)
-    if (existing.isOk()) {
+    if (isOk(existing)) {
       return err(new ConflictError(`An application with the name "${data.name}" already exists`))
     }
 
@@ -110,14 +111,14 @@ export class RegisterApplicationUseCase {
       name: data.name, slug, protocol: data.protocol,
       logoUrl: data.logoUrl, description: data.description,
     })
-    if (appResult.isErr()) return err(appResult.error)
+    if (isErr(appResult)) return err(appResult.error)
 
     const application = appResult.value
     this.logger.info({ appId: application.id, protocol: data.protocol }, 'Application registered')
 
     if (data.protocol === 'saml') {
       const samlResult = await this.repo.saveSamlConfig({ applicationId: application.id, ...data.saml })
-      if (samlResult.isErr()) return err(samlResult.error)
+      if (isErr(samlResult)) return err(samlResult.error)
       return ok({ application, samlConfig: samlResult.value })
     }
 
@@ -125,7 +126,7 @@ export class RegisterApplicationUseCase {
       const clientId = this.creds.generateClientId()
       const clientSecret = this.creds.generateClientSecret()
       const hashResult = await this.hash.hash(clientSecret)
-      if (hashResult.isErr()) return err(hashResult.error)
+      if (isErr(hashResult)) return err(hashResult.error)
       const oidcResult = await this.repo.saveOidcClient({
         applicationId: application.id, clientId, clientSecretHash: hashResult.value,
         redirectUris: data.oidc.redirectUris, postLogoutUris: data.oidc.postLogoutUris,
@@ -134,13 +135,13 @@ export class RegisterApplicationUseCase {
         pkceRequired: data.oidc.pkceRequired, accessTokenTtl: data.oidc.accessTokenTtl,
         refreshTokenTtl: data.oidc.refreshTokenTtl,
       })
-      if (oidcResult.isErr()) return err(oidcResult.error)
+      if (isErr(oidcResult)) return err(oidcResult.error)
       return ok({ application, oidcClient: oidcResult.value, oidcClientSecret: clientSecret })
     }
 
     if (data.protocol === 'jwt') {
       const jwtResult = await this.repo.saveJwtConfig({ applicationId: application.id, ...data.jwt })
-      if (jwtResult.isErr()) return err(jwtResult.error)
+      if (isErr(jwtResult)) return err(jwtResult.error)
       return ok({ application, jwtConfig: jwtResult.value })
     }
 

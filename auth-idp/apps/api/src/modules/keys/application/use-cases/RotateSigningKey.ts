@@ -4,12 +4,13 @@ import type { Result } from '../../../../shared/result/Result.js'
 import type { AppError } from '../../../../shared/errors/AppError.js'
 import { NotFoundError } from '../../../../shared/errors/AppError.js'
 import type { Logger } from '../../../../shared/logger/logger.js'
-import type { KeyAlgorithm } from '../../../../database/index.js'
+import type { KeyAlgorithm } from '../../../../shared/types/domain-types.js'
 import type { SigningKey } from '../../domain/SigningKey.js'
 import type { ISigningKeyRepository } from '../ports/ISigningKeyRepository.js'
 import type { IKeyEncryptionService } from '../ports/IKeyEncryptionService.js'
 import type { IKeyGenerationService } from '../ports/IKeyGenerationService.js'
 import type { IKeyCache } from '../ports/IKeyCache.js'
+import { isErr } from '../../../../shared/result/Result.js'
 
 export interface RotateSigningKeyCmd {
   algorithm?: KeyAlgorithm
@@ -44,7 +45,7 @@ export class RotateSigningKeyUseCase {
     const expiresInDays = cmd.expiresInDays ?? 90
 
     const currentResult = await this.repo.findActiveSigningKey()
-    if (currentResult.isErr()) {
+    if (isErr(currentResult)) {
       return err(new NotFoundError('No active signing key to rotate. Generate one first.'))
     }
 
@@ -52,17 +53,17 @@ export class RotateSigningKeyUseCase {
     this.logger.info({ outgoingKid: currentKey.kid }, 'Rotating signing key')
 
     const keyPairResult = this.generation.generateKeyPair(algorithm)
-    if (keyPairResult.isErr()) return err(keyPairResult.error)
+    if (isErr(keyPairResult)) return err(keyPairResult.error)
 
     const encryptResult = this.encryption.encrypt(keyPairResult.value.privateKeyPem)
-    if (encryptResult.isErr()) return err(encryptResult.error)
+    if (isErr(encryptResult)) return err(encryptResult.error)
 
     const kid = `key_${randomBytes(8).toString('hex')}`
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + expiresInDays)
 
     const retireResult = await this.repo.updateStatus(currentKey.kid, 'retired')
-    if (retireResult.isErr()) return err(retireResult.error)
+    if (isErr(retireResult)) return err(retireResult.error)
 
     const saveResult = await this.repo.save({
       kid, algorithm, use: 'sig', status: 'active',
@@ -71,7 +72,7 @@ export class RotateSigningKeyUseCase {
       encryptionIv: encryptResult.value.iv,
       expiresAt,
     })
-    if (saveResult.isErr()) return err(saveResult.error)
+    if (isErr(saveResult)) return err(saveResult.error)
 
     await this.cache.invalidate()
 

@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import type { Cradle } from '../../../shared/container/index.js'
+import { isErr } from '../../../shared/result/Result.js'
 
 // Reuse the session auth helper from M04 — resolves userId from Bearer token
 async function requireSession(
@@ -14,7 +15,7 @@ async function requireSession(
   }
   const token = auth.slice(7)
   const result = await sessionStore.get(token)
-  if (result.isErr()) {
+  if (isErr(result)) {
     reply.status(401).send({ code: 'UNAUTHORIZED', message: 'Invalid or expired session' })
     return null
   }
@@ -30,7 +31,7 @@ export async function registerMfaRoutes(app: FastifyInstance): Promise<void> {
 
     const { getMfaStatusUseCase } = request.container.cradle as Cradle
     const result = await getMfaStatusUseCase.execute(userId)
-    if (result.isErr()) throw result.error
+    if (isErr(result)) throw result.error
 
     const status = result.value
     return reply.send({
@@ -48,7 +49,7 @@ export async function registerMfaRoutes(app: FastifyInstance): Promise<void> {
 
     const { setupTotpUseCase } = request.container.cradle as Cradle
     const result = await setupTotpUseCase.execute(userId)
-    if (result.isErr()) throw result.error
+    if (isErr(result)) throw result.error
 
     return reply.status(200).send(result.value)
   })
@@ -65,7 +66,7 @@ export async function registerMfaRoutes(app: FastifyInstance): Promise<void> {
 
     const { verifyTotpSetupUseCase } = request.container.cradle as Cradle
     const result = await verifyTotpSetupUseCase.execute(userId, body.code)
-    if (result.isErr()) throw result.error
+    if (isErr(result)) throw result.error
 
     return reply.status(200).send({
       message: 'MFA activated successfully',
@@ -85,7 +86,7 @@ export async function registerMfaRoutes(app: FastifyInstance): Promise<void> {
 
     const { validateTotpUseCase } = request.container.cradle as Cradle
     const result = await validateTotpUseCase.execute(userId, body.code)
-    if (result.isErr()) throw result.error
+    if (isErr(result)) throw result.error
 
     return reply.status(200).send({ message: 'TOTP validated successfully' })
   })
@@ -97,7 +98,7 @@ export async function registerMfaRoutes(app: FastifyInstance): Promise<void> {
 
     const { generateBackupCodesUseCase } = request.container.cradle as Cradle
     const result = await generateBackupCodesUseCase.execute(userId)
-    if (result.isErr()) throw result.error
+    if (isErr(result)) throw result.error
 
     return reply.status(200).send({
       backupCodes: result.value,
@@ -117,7 +118,7 @@ export async function registerMfaRoutes(app: FastifyInstance): Promise<void> {
 
     const { useBackupCodeUseCase } = request.container.cradle as Cradle
     const result = await useBackupCodeUseCase.execute(userId, body.code)
-    if (result.isErr()) throw result.error
+    if (isErr(result)) throw result.error
 
     return reply.status(200).send({ message: 'Backup code accepted' })
   })

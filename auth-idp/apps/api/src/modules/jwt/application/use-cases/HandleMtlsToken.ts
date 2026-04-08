@@ -9,6 +9,7 @@ import type { IKeyEncryptionService } from '../../../keys/application/ports/IKey
 import type { ICertThumbprintExtractor } from '../ports/ICertThumbprintExtractor.js'
 import type { IAccessTokenIssuer } from '../ports/IAccessTokenIssuer.js'
 import type { AccessToken } from '../../domain/AccessToken.js'
+import { isOk, isErr } from '../../../../shared/result/Result.js'
 
 export interface HandleMtlsTokenCmd {
   clientCertPem: string
@@ -36,11 +37,11 @@ export class HandleMtlsTokenUseCase {
     }
 
     const thumbprintResult = certThumbprintExtractor.extract(cmd.clientCertPem)
-    if (thumbprintResult.isErr()) return err(thumbprintResult.error)
+    if (isErr(thumbprintResult)) return err(thumbprintResult.error)
     const thumbprint = thumbprintResult.value
 
     const appResult = await applicationRepository.findByThumbprint(thumbprint)
-    if (appResult.isErr()) return err(appResult.error)
+    if (isErr(appResult)) return err(appResult.error)
     const { application, jwtConfig } = appResult.value
 
     if (!jwtConfig) {
@@ -51,14 +52,14 @@ export class HandleMtlsTokenUseCase {
     }
 
     const keyResult = await signingKeyRepository.findActiveSigningKey()
-    if (keyResult.isErr()) return err(keyResult.error)
+    if (isErr(keyResult)) return err(keyResult.error)
     const signingKey = keyResult.value
 
     const decryptResult = await keyEncryptionService.decrypt(
       signingKey.encryptedPrivateKey,
       signingKey.encryptionIv,
     )
-    if (decryptResult.isErr()) return err(decryptResult.error)
+    if (isErr(decryptResult)) return err(decryptResult.error)
 
     logger.info({ clientId: application.id, thumbprint, kid: signingKey.kid }, 'Issuing JWT access token via mTLS')
 

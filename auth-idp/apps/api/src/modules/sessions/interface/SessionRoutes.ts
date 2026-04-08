@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import type { Cradle } from '../../../shared/container/index.js'
+import { isOk, isErr } from '../../../shared/result/Result.js'
 
 async function requireSession(
   request: FastifyRequest,
@@ -13,7 +14,7 @@ async function requireSession(
   }
   const token = auth.slice(7)
   const result = await sessionStore.get(token)
-  if (result.isErr()) {
+  if (isErr(result)) {
     reply.status(401).send({ code: 'UNAUTHORIZED', message: 'Invalid or expired session' })
     return null
   }
@@ -29,7 +30,7 @@ export async function registerSessionRoutes(app: FastifyInstance): Promise<void>
 
     const { getUserSessionsUseCase } = request.container.cradle as Cradle
     const result = await getUserSessionsUseCase.execute(userId)
-    if (result.isErr()) throw result.error
+    if (isErr(result)) throw result.error
 
     return reply.send({
       sessions: result.value.map(s => ({
@@ -57,7 +58,7 @@ export async function registerSessionRoutes(app: FastifyInstance): Promise<void>
         sessionId: request.params.id,
         requestingUserId: userId,
       })
-      if (result.isErr()) throw result.error
+      if (isErr(result)) throw result.error
 
       return reply.status(200).send({ message: 'Session revoked' })
     },
@@ -70,7 +71,7 @@ export async function registerSessionRoutes(app: FastifyInstance): Promise<void>
 
     const { revokeAllSessionsUseCase } = request.container.cradle as Cradle
     const result = await revokeAllSessionsUseCase.execute(userId)
-    if (result.isErr()) throw result.error
+    if (isErr(result)) throw result.error
 
     return reply.status(200).send({ message: 'All sessions revoked' })
   })
@@ -87,7 +88,7 @@ export async function registerSessionRoutes(app: FastifyInstance): Promise<void>
 
       const { revokeAllSessionsUseCase } = request.container.cradle as Cradle
       const result = await revokeAllSessionsUseCase.execute(request.params.userId)
-      if (result.isErr()) throw result.error
+      if (isErr(result)) throw result.error
 
       return reply.status(200).send({ message: `All sessions revoked for user ${request.params.userId}` })
     },

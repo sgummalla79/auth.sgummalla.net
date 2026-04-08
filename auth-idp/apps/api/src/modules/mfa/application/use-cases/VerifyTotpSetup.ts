@@ -1,4 +1,4 @@
-import { ok, err } from '../../../../shared/result/Result.js'
+import { ok, err, isErr, isOk } from '../../../../shared/result/Result.js'
 import type { Result } from '../../../../shared/result/Result.js'
 import type { AppError } from '../../../../shared/errors/AppError.js'
 import { ValidationError, UnauthorizedError } from '../../../../shared/errors/AppError.js'
@@ -28,7 +28,7 @@ export class VerifyTotpSetupUseCase {
 
     // 1. Load pending TOTP data
     const mfaResult = await mfaRepository.getMfaData(userId)
-    if (mfaResult.isErr()) return err(mfaResult.error)
+    if (isErr(mfaResult)) return err(mfaResult.error)
     const mfaData = mfaResult.value
 
     if (!mfaData.totpPending || !mfaData.totpSecret) {
@@ -44,7 +44,7 @@ export class VerifyTotpSetupUseCase {
     }
 
     const decryptResult = await keyEncryptionService.decrypt(ciphertext, iv)
-    if (decryptResult.isErr()) return err(decryptResult.error)
+    if (isErr(decryptResult)) return err(decryptResult.error)
     const secret = decryptResult.value
 
     // 3. Verify the code
@@ -59,14 +59,14 @@ export class VerifyTotpSetupUseCase {
       plaintextCodes.map(c => backupCodeService.hash(c)),
     )
 
-    const failedHash = hashedCodes.find(r => r.isErr())
-    if (failedHash?.isErr()) return err(failedHash.error)
+    const failedHash = hashedCodes.find(r => isErr(r))
+    if (failedHash && isErr(failedHash)) return err(failedHash.error)
 
-    const hashes = hashedCodes.map(r => (r.isOk() ? r.value : ''))
+    const hashes = hashedCodes.map(r => (isOk(r) ? r.value : ''))
 
     // 5. Activate MFA
     const activateResult = await mfaRepository.activateMfa(userId, hashes)
-    if (activateResult.isErr()) return err(activateResult.error)
+    if (isErr(activateResult)) return err(activateResult.error)
 
     logger.info({ userId }, 'MFA activated via TOTP verification')
 

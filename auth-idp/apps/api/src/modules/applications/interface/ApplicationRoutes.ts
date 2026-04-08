@@ -3,6 +3,7 @@ import { isAppError, UnauthorizedError } from '../../../shared/errors/AppError.j
 import type { RegisterApplicationUseCase } from '../application/use-cases/RegisterApplication.js'
 import type { GetApplicationUseCase, ListApplicationsUseCase, UpdateApplicationUseCase } from '../application/use-cases/ApplicationQueries.js'
 import type { Env } from '../../../shared/config/env.js'
+import { isOk, isErr } from '../../../shared/result/Result.js'
 
 interface Deps {
   registerApplicationUseCase: RegisterApplicationUseCase
@@ -38,7 +39,7 @@ export async function registerApplicationRoutes(app: FastifyInstance, deps: Deps
     adminApp.post('/api/v1/admin/applications',
       async (request: FastifyRequest, reply: FastifyReply) => {
         const result = await registerApplicationUseCase.execute(request.body)
-        if (result.isErr()) return sendError(reply, result.error, request.id)
+        if (isErr(result)) return sendError(reply, result.error, request.id)
 
         const { application, samlConfig, oidcClient, oidcClientSecret, jwtConfig } = result.value
         const response: Record<string, unknown> = {
@@ -79,7 +80,7 @@ export async function registerApplicationRoutes(app: FastifyInstance, deps: Deps
     adminApp.get('/api/v1/admin/applications',
       async (request: FastifyRequest, reply: FastifyReply) => {
         const result = await listApplicationsUseCase.execute()
-        if (result.isErr()) return sendError(reply, result.error, request.id)
+        if (isErr(result)) return sendError(reply, result.error, request.id)
         return reply.status(200).send({
           applications: result.value.map((a) => ({
             id: a.id, name: a.name, slug: a.slug,
@@ -94,7 +95,7 @@ export async function registerApplicationRoutes(app: FastifyInstance, deps: Deps
     adminApp.get('/api/v1/admin/applications/:id',
       async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
         const result = await getApplicationUseCase.execute(request.params.id)
-        if (result.isErr()) return sendError(reply, result.error, request.id)
+        if (isErr(result)) return sendError(reply, result.error, request.id)
 
         const { application, samlConfig, oidcClient, jwtConfig } = result.value
         const response: Record<string, unknown> = {
@@ -134,7 +135,7 @@ export async function registerApplicationRoutes(app: FastifyInstance, deps: Deps
     adminApp.patch('/api/v1/admin/applications/:id',
       async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
         const result = await updateApplicationUseCase.execute(request.params.id, request.body)
-        if (result.isErr()) return sendError(reply, result.error, request.id)
+        if (isErr(result)) return sendError(reply, result.error, request.id)
         const a = result.value
         return reply.status(200).send({
           id: a.id, name: a.name, slug: a.slug, protocol: a.protocol,

@@ -1,4 +1,4 @@
-import { err } from '../../../../shared/result/Result.js'
+import { err, isErr, isOk} from '../../../../shared/result/Result.js'
 import type { Result } from '../../../../shared/result/Result.js'
 import type { AppError } from '../../../../shared/errors/AppError.js'
 import { ValidationError } from '../../../../shared/errors/AppError.js'
@@ -29,7 +29,7 @@ export class GetIdpMetadataUseCase {
 
     // 1. Load app + SAML config
     const appResult = await applicationRepository.findWithConfig(appId)
-    if (appResult.isErr()) return err(appResult.error)
+    if (isErr(appResult)) return err(appResult.error)
     const { application, samlConfig } = appResult.value
 
     if (!samlConfig) {
@@ -41,7 +41,7 @@ export class GetIdpMetadataUseCase {
 
     // 2. Active signing key
     const keyResult = await signingKeyRepository.findActiveSigningKey()
-    if (keyResult.isErr()) return err(keyResult.error)
+    if (isErr(keyResult)) return err(keyResult.error)
     const signingKey = keyResult.value
 
     // 3. Decrypt private key
@@ -49,7 +49,7 @@ export class GetIdpMetadataUseCase {
       signingKey.encryptedPrivateKey,
       signingKey.encryptionIv,
     )
-    if (decryptResult.isErr()) return err(decryptResult.error)
+    if (isErr(decryptResult)) return err(decryptResult.error)
 
     // 4. Self-signed X.509 cert (cached by kid)
     const certResult = await samlCertificateService.generateOrGetCert(
@@ -57,7 +57,7 @@ export class GetIdpMetadataUseCase {
       decryptResult.value,
       signingKey.publicKeyPem,
     )
-    if (certResult.isErr()) return err(certResult.error)
+    if (isErr(certResult)) return err(certResult.error)
 
     logger.info({ appId, kid: signingKey.kid }, 'Generating SAML metadata')
 

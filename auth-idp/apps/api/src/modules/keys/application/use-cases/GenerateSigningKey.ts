@@ -1,10 +1,10 @@
 import { randomBytes } from 'crypto'
-import { ok, err } from '../../../../shared/result/Result.js'
+import { ok, err, isErr, isOk } from '../../../../shared/result/Result.js'
 import type { Result } from '../../../../shared/result/Result.js'
 import type { AppError } from '../../../../shared/errors/AppError.js'
 import { ConflictError } from '../../../../shared/errors/AppError.js'
 import type { Logger } from '../../../../shared/logger/logger.js'
-import type { KeyAlgorithm } from '../../../../database/index.js'
+import type { KeyAlgorithm } from '../../../../shared/types/domain-types.js'
 import type { SigningKey } from '../../domain/SigningKey.js'
 import type { ISigningKeyRepository } from '../ports/ISigningKeyRepository.js'
 import type { IKeyEncryptionService } from '../ports/IKeyEncryptionService.js'
@@ -46,17 +46,17 @@ export class GenerateSigningKeyUseCase {
     this.logger.info({ algorithm }, 'Generating signing key')
 
     const existing = await this.repo.findActiveSigningKey()
-    if (existing.isOk()) {
+    if (isErr(existing)) {
       return err(new ConflictError(
         'An active signing key already exists. Use /rotate to replace it.',
       ))
     }
 
     const keyPairResult = this.generation.generateKeyPair(algorithm)
-    if (keyPairResult.isErr()) return err(keyPairResult.error)
+    if (isErr(keyPairResult)) return err(keyPairResult.error)
 
     const encryptResult = this.encryption.encrypt(keyPairResult.value.privateKeyPem)
-    if (encryptResult.isErr()) return err(encryptResult.error)
+    if (isErr(encryptResult)) return err(encryptResult.error)
 
     const kid = `key_${randomBytes(8).toString('hex')}`
     const expiresAt = new Date()
@@ -73,7 +73,7 @@ export class GenerateSigningKeyUseCase {
       expiresAt,
     })
 
-    if (saveResult.isErr()) return err(saveResult.error)
+    if (isErr(saveResult)) return err(saveResult.error)
 
     await this.cache.invalidate()
 

@@ -5,6 +5,7 @@ import type { GenerateSigningKeyUseCase } from '../application/use-cases/Generat
 import type { RotateSigningKeyUseCase } from '../application/use-cases/RotateSigningKey.js'
 import { GenerateKeySchema, RotateKeySchema } from './KeyDTOs.js'
 import type { Env } from '../../../shared/config/env.js'
+import { isErr } from '../../../shared/result/Result.js'
 
 interface Deps {
   getJwksUseCase: GetJwksUseCase
@@ -39,7 +40,7 @@ export async function registerKeyRoutes(
     { config: { rateLimit: { max: 300, timeWindow: '1 minute' } } },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const result = await getJwksUseCase.execute()
-      if (result.isErr()) {
+      if (isErr(result)) {
         return reply.status(500).send({ code: 'INTERNAL_ERROR', message: 'Failed to retrieve keys' })
       }
       return reply
@@ -60,7 +61,7 @@ export async function registerKeyRoutes(
           algorithm: body.algorithm as 'RS256' | undefined,
           expiresInDays: body.expiresInDays,
         })
-        if (result.isErr()) {
+        if (isErr(result)) {
           const e = result.error
           return reply.status(isAppError(e) ? e.statusCode : 500).send({
             ...(isAppError(e) ? e.toJSON() : { code: 'INTERNAL_ERROR', message: 'Unknown error' }),
@@ -85,7 +86,7 @@ export async function registerKeyRoutes(
           algorithm: body.algorithm as 'RS256' | undefined,
           expiresInDays: body.expiresInDays,
         })
-        if (result.isErr()) {
+        if (isErr(result)) {
           const e = result.error
           return reply.status(isAppError(e) ? e.statusCode : 500).send({
             ...(isAppError(e) ? e.toJSON() : { code: 'INTERNAL_ERROR', message: 'Unknown error' }),

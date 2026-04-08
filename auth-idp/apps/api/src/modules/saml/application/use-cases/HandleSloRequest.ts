@@ -1,4 +1,4 @@
-import { err } from '../../../../shared/result/Result.js'
+import { err, isErr, isOk } from '../../../../shared/result/Result.js'
 import type { Result } from '../../../../shared/result/Result.js'
 import type { AppError } from '../../../../shared/errors/AppError.js'
 import { ValidationError } from '../../../../shared/errors/AppError.js'
@@ -38,7 +38,7 @@ export class HandleSloRequestUseCase {
 
     // 1. Load app + SAML config
     const appResult = await applicationRepository.findWithConfig(cmd.appId)
-    if (appResult.isErr()) return err(appResult.error)
+    if (isErr(appResult)) return err(appResult.error)
     const { application, samlConfig } = appResult.value
 
     if (!samlConfig) {
@@ -48,7 +48,7 @@ export class HandleSloRequestUseCase {
     // 2. Terminate the user's IDP session (best-effort — don't fail SLO if session is already gone)
     if (cmd.sessionToken) {
       const deleteResult = await sessionStore.delete(cmd.sessionToken)
-      if (deleteResult.isErr()) {
+      if (isErr(deleteResult)) {
         logger.warn({ appId: cmd.appId }, 'Failed to delete session during SLO — proceeding anyway')
       } else {
         logger.info({ appId: cmd.appId }, 'Session terminated via SAML SLO')
@@ -57,21 +57,21 @@ export class HandleSloRequestUseCase {
 
     // 3. Active signing key → decrypt → cert
     const keyResult = await signingKeyRepository.findActiveSigningKey()
-    if (keyResult.isErr()) return err(keyResult.error)
+    if (isErr(keyResult)) return err(keyResult.error)
     const signingKey = keyResult.value
 
     const decryptResult = await keyEncryptionService.decrypt(
       signingKey.encryptedPrivateKey,
       signingKey.encryptionIv,
     )
-    if (decryptResult.isErr()) return err(decryptResult.error)
+    if (isErr(decryptResult)) return err(decryptResult.error)
 
     const certResult = await samlCertificateService.generateOrGetCert(
       signingKey.kid,
       decryptResult.value,
       signingKey.publicKeyPem,
     )
-    if (certResult.isErr()) return err(certResult.error)
+    if (isErr(certResult)) return err(certResult.error)
 
     logger.info({ appId: cmd.appId, kid: signingKey.kid }, 'Creating SAML SLO response')
 

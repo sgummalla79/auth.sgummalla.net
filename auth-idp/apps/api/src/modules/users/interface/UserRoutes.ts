@@ -5,6 +5,7 @@ import type { LoginUserUseCase } from '../application/use-cases/LoginUser.js'
 import type { GetUserProfileUseCase, UpdateUserProfileUseCase } from '../application/use-cases/UserProfile.js'
 import type { ISessionStore } from '../application/ports/ISessionStore.js'
 import { requireAuth } from './AuthMiddleware.js'
+import { isErr } from '../../../shared/result/Result.js'
 
 interface Deps {
   registerUserUseCase: RegisterUserUseCase
@@ -28,7 +29,7 @@ export async function registerUserRoutes(app: FastifyInstance, deps: Deps): Prom
     { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const result = await registerUserUseCase.execute(request.body)
-      if (result.isErr()) return sendError(reply, result.error, request.id)
+      if (isErr(result)) return sendError(reply, result.error, request.id)
       const { user } = result.value
       return reply.status(201).send({
         id: user.id, email: user.email, status: user.status, createdAt: user.createdAt,
@@ -41,7 +42,7 @@ export async function registerUserRoutes(app: FastifyInstance, deps: Deps): Prom
     { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const result = await loginUserUseCase.execute(request.body)
-      if (result.isErr()) return sendError(reply, result.error, request.id)
+      if (isErr(result)) return sendError(reply, result.error, request.id)
       return reply.status(200).send(result.value)
     },
   )
@@ -59,7 +60,7 @@ export async function registerUserRoutes(app: FastifyInstance, deps: Deps): Prom
     { preHandler: requireAuth(sessionStore) },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const result = await getUserProfileUseCase.execute(request.userId)
-      if (result.isErr()) return sendError(reply, result.error, request.id)
+      if (isErr(result)) return sendError(reply, result.error, request.id)
       const { user, profile } = result.value
       return reply.status(200).send({
         id: user.id, email: user.email, emailVerified: user.emailVerified,
@@ -75,7 +76,7 @@ export async function registerUserRoutes(app: FastifyInstance, deps: Deps): Prom
     { preHandler: requireAuth(sessionStore) },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const result = await updateUserProfileUseCase.execute(request.userId, request.body)
-      if (result.isErr()) return sendError(reply, result.error, request.id)
+      if (isErr(result)) return sendError(reply, result.error, request.id)
       return reply.status(200).send(result.value)
     },
   )

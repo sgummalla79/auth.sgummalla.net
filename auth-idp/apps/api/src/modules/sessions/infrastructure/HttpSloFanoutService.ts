@@ -7,6 +7,7 @@ import type { ISamlIdpService } from '../../saml/application/ports/ISamlIdpServi
 import type { ISamlCertificateService } from '../../saml/application/ports/ISamlCertificateService.js'
 import type { Logger } from '../../../shared/logger/logger.js'
 import type { Env } from '../../../shared/config/env.js'
+import { isErr } from '../../../shared/result/Result.js'
 
 interface Deps {
   applicationRepository: IApplicationRepository
@@ -68,26 +69,26 @@ export class HttpSloFanoutService implements ISloFanoutService {
 
     try {
       const appResult = await applicationRepository.findWithConfig(app.appId)
-      if (appResult.isErr() || !appResult.value.samlConfig?.sloUrl) {
+      if (isErr(appResult) || !appResult.value.samlConfig?.sloUrl) {
         return { appId: app.appId, protocol: 'saml', success: true } // no SLO URL configured — skip
       }
       const { samlConfig } = appResult.value
 
       const keyResult = await signingKeyRepository.findActiveSigningKey()
-      if (keyResult.isErr()) throw new Error('No active signing key')
+      if (isErr(keyResult)) throw new Error('No active signing key')
 
       const decryptResult = await keyEncryptionService.decrypt(
         keyResult.value.encryptedPrivateKey,
         keyResult.value.encryptionIv,
       )
-      if (decryptResult.isErr()) throw new Error('Key decryption failed')
+      if (isErr(decryptResult)) throw new Error('Key decryption failed')
 
       const certResult = await samlCertificateService.generateOrGetCert(
         keyResult.value.kid,
         decryptResult.value,
         keyResult.value.publicKeyPem,
       )
-      if (certResult.isErr()) throw new Error('Cert generation failed')
+      if (isErr(certResult)) throw new Error('Cert generation failed')
 
       const sloResult = await samlIdpService.createSloResponse(
         samlConfig,
@@ -98,7 +99,7 @@ export class HttpSloFanoutService implements ISloFanoutService {
         { privateKeyPem: decryptResult.value, certPem: certResult.value, kid: keyResult.value.kid },
       )
 
-      if (sloResult.isErr()) throw new Error(sloResult.error.message)
+      if (isErr(sloResult)) throw new Error(sloResult.error.message)
 
       // POST the LogoutRequest to the SP's SLO endpoint
       const response = await fetch(samlConfig.sloUrl!, {

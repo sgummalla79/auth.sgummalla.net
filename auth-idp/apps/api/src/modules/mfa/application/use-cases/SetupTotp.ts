@@ -1,4 +1,4 @@
-import { ok, err } from '../../../../shared/result/Result.js'
+import { ok, err, isErr } from '../../../../shared/result/Result.js'
 import type { Result } from '../../../../shared/result/Result.js'
 import type { AppError } from '../../../../shared/errors/AppError.js'
 import { ValidationError } from '../../../../shared/errors/AppError.js'
@@ -31,24 +31,24 @@ export class SetupTotpUseCase {
 
     // 1. Load user
     const userResult = await userRepository.findById(userId)
-    if (userResult.isErr()) return err(userResult.error)
+    if (isErr(userResult)) return err(userResult.error)
     const user = userResult.value
 
     // 2. Check MFA not already active
     const mfaResult = await mfaRepository.getMfaData(userId)
-    if (mfaResult.isErr()) return err(mfaResult.error)
+    if (isErr(mfaResult)) return err(mfaResult.error)
     if (mfaResult.value.mfaEnabled) {
       return err(new ValidationError('MFA is already enabled. Disable it first before re-enrolling.'))
     }
 
     // 3. Generate secret
     const secretResult = totpService.generateSecret(user.email, config.IDP_BASE_URL)
-    if (secretResult.isErr()) return err(secretResult.error)
+    if (isErr(secretResult)) return err(secretResult.error)
     const totpSecret = secretResult.value
 
     // 4. Encrypt secret before storing
     const encryptResult = await keyEncryptionService.encrypt(totpSecret.secret)
-    if (encryptResult.isErr()) return err(encryptResult.error)
+    if (isErr(encryptResult)) return err(encryptResult.error)
     const { ciphertext, iv } = encryptResult.value
 
     // Store as "ciphertext:iv" — single column, easy to split on retrieval
@@ -56,7 +56,7 @@ export class SetupTotpUseCase {
 
     // 5. Persist as pending (not yet verified)
     const saveResult = await mfaRepository.savePendingTotp(userId, encryptedSecret)
-    if (saveResult.isErr()) return err(saveResult.error)
+    if (isErr(saveResult)) return err(saveResult.error)
 
     logger.info({ userId }, 'TOTP setup initiated')
 
