@@ -1,57 +1,50 @@
 import {
-  pgTable, pgEnum, uuid, text, timestamp, index, uniqueIndex,
+  pgTable,
+  pgEnum,
+  uuid,
+  text,
+  timestamp,
+  index,
 } from 'drizzle-orm/pg-core'
-import { relations } from 'drizzle-orm'
-import { users } from '../../users/infrastructure/users.schema.js'
+import { organizations } from '../../organizations/infrastructure/organizations.schema'
+import { users } from '../../users/infrastructure/users.schema'
+import { sql } from 'drizzle-orm'
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
 export const sessionStatusEnum = pgEnum('session_status', [
   'active',
   'expired',
-  'logged_out',
   'revoked',
 ])
 
 // ─── SSO Sessions ─────────────────────────────────────────────────────────────
+// organization_id stored directly for fast tenant-filtered queries (no join needed)
 
 export const ssoSessions = pgTable(
   'sso_sessions',
   {
-    id: uuid('id').primaryKey().defaultRandom(),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    sessionToken: text('session_token').notNull(),
-    status: sessionStatusEnum('status').notNull().default('active'),
-    participatingAppIds: text('participating_app_ids').array().notNull().default([]),
-    ipAddress: text('ip_address'),
-    amr: text('amr').array().notNull().default([]),
-    userAgent: text('user_agent'),
-    authenticatedAt: timestamp('authenticated_at', { withTimezone: true }).defaultNow().notNull(),
-    lastActiveAt: timestamp('last_active_at', { withTimezone: true }).defaultNow().notNull(),
-    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
-    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    id:                  uuid('id').primaryKey().defaultRandom(),
+    organizationId:      uuid('organization_id')
+                           .notNull()
+                           .references(() => organizations.id, { onDelete: 'cascade' }),
+    userId:              uuid('user_id')
+                           .notNull()
+                           .references(() => users.id, { onDelete: 'cascade' }),
+    status:              sessionStatusEnum('status').notNull().default('active'),
+    ipAddress:           text('ip_address'),
+    userAgent:           text('user_agent'),
+    amr:                 text('amr').array().notNull().default(sql`'{}'::text[]`),
+    participatingAppIds: text('participating_app_ids').array().notNull().default(sql`'{}'::text[]`),
+    expiresAt:           timestamp('expires_at', { withTimezone: true }).notNull(),
+    revokedAt:           timestamp('revoked_at', { withTimezone: true }),
+    createdAt:           timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt:           timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => ({
-    tokenIdx: uniqueIndex('sso_sessions_token_idx').on(t.sessionToken),
-    userIdx: index('sso_sessions_user_id_idx').on(t.userId),
+    orgIdx:    index('sso_sessions_organization_id_idx').on(t.organizationId),
+    userIdx:   index('sso_sessions_user_id_idx').on(t.userId),
     statusIdx: index('sso_sessions_status_idx').on(t.status),
-    expiresIdx: index('sso_sessions_expires_at_idx').on(t.expiresAt),
+    expiryIdx: index('sso_sessions_expires_at_idx').on(t.expiresAt),
   }),
 )
-
-// ─── Relations ────────────────────────────────────────────────────────────────
-
-export const ssoSessionsRelations = relations(ssoSessions, ({ one }) => ({
-  user: one(users, {
-    fields: [ssoSessions.userId],
-    references: [users.id],
-  }),
-}))
-
-// ─── TypeScript types ─────────────────────────────────────────────────────────
-
-export type SsoSession = typeof ssoSessions.$inferSelect
-export type NewSsoSession = typeof ssoSessions.$inferInsert
-export type SessionStatus = (typeof sessionStatusEnum.enumValues)[number]

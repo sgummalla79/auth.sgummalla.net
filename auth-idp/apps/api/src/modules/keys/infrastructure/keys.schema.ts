@@ -7,52 +7,52 @@ import {
   index,
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
+import { organizations } from '../../organizations/infrastructure/organizations.schema'
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-export const keyUseEnum = pgEnum('key_use', ['sig', 'enc'])
-
-export const keyAlgorithmEnum = pgEnum('key_algorithm', [
-  'RS256', 'RS384', 'RS512',
-  'ES256', 'ES384', 'ES512',
+export const signingKeyAlgorithmEnum = pgEnum('signing_key_algorithm', [
+  'RS256',
+  'RS384',
+  'RS512',
+  'ES256',
+  'ES384',
+  'ES512',
 ])
 
-export const keyStatusEnum = pgEnum('key_status', [
-  'active',    // Current primary — used for signing
-  'rotating',  // Published in JWKS but not yet signing
-  'retired',   // Kept only to verify existing tokens
-  'revoked',   // Compromised — never used again
+export const signingKeyStatusEnum = pgEnum('signing_key_status', [
+  'active',
+  'rotating',
+  'retired',
+  'revoked',
 ])
 
 // ─── Signing Keys ─────────────────────────────────────────────────────────────
+// Each org owns its own RSA/EC keypair — isolated rotation lifecycle
 
 export const signingKeys = pgTable(
   'signing_keys',
   {
-    id: uuid('id').primaryKey().defaultRandom(),
-    kid: text('kid').notNull(),
-    algorithm: keyAlgorithmEnum('algorithm').notNull(),
-    use: keyUseEnum('use').notNull().default('sig'),
-    status: keyStatusEnum('status').notNull().default('active'),
-    publicKey: text('public_key').notNull(),
+    id:                 uuid('id').primaryKey().defaultRandom(),
+    organizationId:     uuid('organization_id')
+                          .notNull()
+                          .references(() => organizations.id, { onDelete: 'cascade' }),
+    algorithm:          signingKeyAlgorithmEnum('algorithm').notNull().default('RS256'),
+    status:             signingKeyStatusEnum('status').notNull().default('active'),
     encryptedPrivateKey: text('encrypted_private_key').notNull(),
-    encryptionIv: text('encryption_iv').notNull(),
-    expiresAt: timestamp('expires_at', { withTimezone: true }),
-    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-    rotatedAt: timestamp('rotated_at', { withTimezone: true }),
-    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    encryptionIv:       text('encryption_iv').notNull(),
+    publicKey:          text('public_key').notNull(),
+    publicKeyJwk:       text('public_key_jwk').notNull(),
+    keyId:              text('key_id').notNull(),              // kid in JWKS
+    certificate:        text('certificate'),                   // X.509 cert for SAML
+    expiresAt:          timestamp('expires_at', { withTimezone: true }),
+    rotatedAt:          timestamp('rotated_at', { withTimezone: true }),
+    createdAt:          timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt:          timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => ({
-    kidIdx: uniqueIndex('signing_keys_kid_idx').on(t.kid),
-    statusIdx: index('signing_keys_status_idx').on(t.status),
-    useStatusIdx: index('signing_keys_use_status_idx').on(t.use, t.status),
+    orgIdx:      index('signing_keys_organization_id_idx').on(t.organizationId),
+    statusIdx:   index('signing_keys_status_idx').on(t.status),
+    keyIdIdx:    uniqueIndex('signing_keys_key_id_idx').on(t.organizationId, t.keyId),
   }),
 )
-
-// ─── TypeScript types ─────────────────────────────────────────────────────────
-
-export type SigningKey = typeof signingKeys.$inferSelect
-export type NewSigningKey = typeof signingKeys.$inferInsert
-export type KeyUse = (typeof keyUseEnum.enumValues)[number]
-export type KeyAlgorithm = (typeof keyAlgorithmEnum.enumValues)[number]
-export type KeyStatus = (typeof keyStatusEnum.enumValues)[number]

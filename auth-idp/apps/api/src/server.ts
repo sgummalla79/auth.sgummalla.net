@@ -6,34 +6,12 @@ import { loadConfig } from './shared/config/env.js'
 const config = loadConfig()
 
 import { createLogger } from './shared/logger/logger.js'
-import type { AppContainer } from './shared/container/index.js'
 import { connectRedis, disconnectRedis } from './infrastructure/cache/redis.client.js'
 import { connectMongoDB, disconnectMongoDB } from './infrastructure/mongo/mongo.client.js'
 import { getPostgresClient, disconnectPostgres } from './infrastructure/database/postgres.client.js'
 import { buildApp } from './app.js'
 
 const logger = createLogger('server')
-
-async function bootstrapSigningKeys(container: AppContainer): Promise<void> {
-  const serverLogger = createLogger('server')
-  const repo = container.cradle.signingKeyRepository
-  const existing = await repo.findActiveSigningKey()
-
-  if (existing.isOk()) {
-    serverLogger.info({ kid: existing.value.kid }, 'Active signing key found')
-    return
-  }
-
-  serverLogger.info('No active signing key — generating initial RS256 key')
-  const generateUseCase = container.cradle.generateSigningKeyUseCase
-  const result = await generateUseCase.execute({ algorithm: 'RS256', expiresInDays: 90 })
-
-  if (result.isErr()) {
-    throw new Error(`Failed to generate initial signing key: ${result.error.message}`)
-  }
-
-  serverLogger.info({ kid: result.value.kid }, 'Initial signing key generated')
-}
 
 async function bootstrap(): Promise<void> {
   logger.info({ env: config.NODE_ENV, issuer: config.IDP_ISSUER }, 'Starting IDP server')
@@ -47,7 +25,6 @@ async function bootstrap(): Promise<void> {
   logger.info('Postgres client ready')
 
   const app = await buildApp()
-  await bootstrapSigningKeys(app.container)
   await app.listen({ port: config.PORT, host: config.HOST })
   logger.info({ port: config.PORT }, 'IDP server listening')
 

@@ -1,52 +1,259 @@
 # auth.sgummalla.net
 
-A custom Identity Provider (IDP) supporting SAML 2.0, OIDC/OAuth 2.0, and JWT certificate-based authentication — built for SSO across multiple applications.
+A production-grade, multi-tenant Identity Provider (IDP) supporting **SAML 2.0**, **OAuth 2.0 / OIDC**, and **JWT / Certificate-based auth** for Single Sign-On (SSO).
 
-## Quick Start
+Built with Node.js, TypeScript, Fastify, Supabase (Postgres), Redis Cloud, and MongoDB Atlas.
 
-```bash
-git clone https://github.com/sgummalla79/auth.sgummalla.net.git
-cd auth.sgummalla.net/auth-idp
-pnpm install
-cp apps/api/.env.example apps/api/.env   # fill in all values
-cp apps/admin/.env.example apps/admin/.env
-pnpm dev                                  # starts API on :3000
-pnpm dev:admin                            # starts admin dashboard on :3001
-```
+---
+
+## Table of Contents
+
+- [Architecture](#architecture)
+- [Prerequisites](#prerequisites)
+- [External Services Setup](#external-services-setup)
+- [Project Setup](#project-setup)
+- [Environment Configuration](#environment-configuration)
+- [Generate Secrets](#generate-secrets)
+- [Running the Project](#running-the-project)
+- [Database Schema](#database-schema)
+- [Multi-Tenancy Model](#multi-tenancy-model)
+- [Project Structure](#project-structure)
+- [Module Status](#module-status)
+- [Tech Stack](#tech-stack)
+- [Troubleshooting](#troubleshooting)
+
+---
 
 ## Architecture
+
+Hexagonal architecture (Ports & Adapters) with strict layer separation:
+
+```
+Domain → Application → Infrastructure → Interface
+```
+
+- **Domain** — pure business logic, zero dependencies
+- **Application** — use cases and port interfaces
+- **Infrastructure** — Postgres, Redis, MongoDB adapters (swappable)
+- **Interface** — Fastify routes and request/response DTOs
+- **Shared kernel** — Result monad, typed errors, config, logger
+
+Every external system is behind an interface. Swap any adapter by changing one registration in the Awilix DI container.
+
+---
+
+## Prerequisites
+
+### 1. Install Node.js (v20 or higher)
+
+```bash
+node --version   # must be >= 20
+```
+
+Install via [nvm](https://github.com/nvm-sh/nvm):
+
+```bash
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+nvm install 20 && nvm use 20 && nvm alias default 20
+```
+
+### 2. Install pnpm (v9 or higher)
+
+```bash
+npm install -g pnpm
+pnpm --version   # must be >= 9
+```
+
+### 3. Install jq
+
+```bash
+brew install jq          # macOS
+sudo apt-get install jq  # Ubuntu
+```
+
+---
+
+## External Services Setup
+
+### Supabase (Postgres)
+
+1. [supabase.com](https://supabase.com) → New project
+2. **Project Settings → Database → Connection string**
+3. **Transaction** mode URI (port 6543) → `DATABASE_URL`
+4. **Session** mode URI (port 5432) → `DATABASE_URL_DIRECT`
+
+### Redis Cloud
+
+1. [redis.io/cloud](https://redis.io/cloud) → New database (free tier)
+2. Copy the `rediss://` connection string → `REDIS_URL`
+
+### MongoDB Atlas
+
+1. [mongodb.com/atlas](https://mongodb.com/atlas) → Free cluster
+2. **Database Access** → new user with read/write
+3. **Network Access** → add your IP
+4. **Connect → Drivers** → copy URI → `MONGODB_URI`
+
+---
+
+## Project Setup
+
+```bash
+git clone <repo>
+cd auth-idp
+pnpm install
+cp apps/api/.env.example apps/api/.env
+# fill in .env
+```
+
+---
+
+## Environment Configuration
+
+```env
+NODE_ENV=development
+PORT=3000
+LOG_LEVEL=info
+IDP_BASE_URL=http://localhost:3000
+
+DATABASE_URL=postgresql://postgres.<project>.supabase.co:6543/postgres
+DATABASE_URL_DIRECT=postgresql://postgres.<project>.supabase.co:5432/postgres
+
+REDIS_URL=rediss://:password@host:port
+
+MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/auth-idp
+
+JWT_SECRET=<64-char hex>
+SESSION_SECRET=<64-char hex>
+KEY_ENCRYPTION_SECRET=<64-char hex>
+ADMIN_API_KEY=<random string>
+```
+
+### Generate Secrets
+
+```bash
+node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
+```
+
+Run this three times — once each for `JWT_SECRET`, `SESSION_SECRET`, and `KEY_ENCRYPTION_SECRET`.
+
+---
+
+## Running the Project
+
+```bash
+# API server
+cd apps/api
+pnpm dev
+
+# Admin dashboard
+cd apps/admin
+pnpm dev
+
+# Health check
+curl http://localhost:3000/health | jq
+```
+
+---
+
+## Database Schema
+
+13 tables across 5 modules — all org-scoped:
+
+| Table | Module | Purpose |
+|---|---|---|
+| `organizations` | organizations | Master tenant entity |
+| `roles` | organizations | Org-scoped roles (e.g. org_admin) |
+| `user_roles` | organizations | User ↔ role junction |
+| `applications` | applications | App registry — SAML / OIDC / JWT apps per org |
+| `scopes` | applications | API authorization scopes per application |
+| `saml_configs` | applications | SAML 2.0 config per app |
+| `oidc_clients` | applications | OIDC / OAuth 2.0 client config per app |
+| `jwt_configs` | applications | JWT / cert auth config per app |
+| `users` | users | User accounts — org-scoped |
+| `user_profiles` | users | OIDC claims (name, picture, locale etc.) |
+| `user_mfa` | users | TOTP / WebAuthn factors per user |
+| `signing_keys` | keys | Per-org RSA/EC signing keypairs |
+| `sso_sessions` | sessions | Active SSO sessions + SLO tracking |
+
+### Schema Change Workflow
+
+```bash
+# After editing any schema file:
+pnpm db:generate   # generates SQL migration
+pnpm db:migrate    # applies to Supabase
+```
+
+---
+
+## Multi-Tenancy Model
+
+Every organization is a fully isolated tenant:
+
+```
+organizations  ← master entity
+  ├── signing_keys   (org's own RSA/EC keypair — rotated independently)
+  ├── applications   (SAML / OIDC / JWT apps scoped to the org)
+  │     └── scopes   (API authorization scopes per app)
+  ├── users          (global to org, shared across all apps)
+  │     └── user_roles
+  ├── roles          (org-scoped, global across all apps in the org)
+  ├── sessions       (org_id stored directly for fast tenant queries)
+  └── audit_logs     (org-scoped, isolated per tenant — stored in MongoDB)
+```
+
+**Key isolation rules:**
+- Each org gets its own RSA keypair — SAML assertions and OIDC tokens are signed with the org's key only
+- User email is unique per org (same email can exist in two different orgs)
+- Application slug is unique per org
+- Rotating one org's key has zero effect on other orgs
+
+**Roles:**
+- Global to the org — a user's roles apply across all applications in that org
+- `org_admin` is a system role (seeded on org creation, cannot be deleted)
+- Org admins can manage applications, users, roles, and scopes within their org
+- One user can be org_admin for multiple orgs — org switcher in the UI
+
+---
+
+## Project Structure
 
 ```
 auth-idp/
 ├── apps/
-│   ├── api/                 # Fastify API — all IDP endpoints
+│   ├── api/                          # Fastify API — hexagonal architecture
 │   │   ├── src/
-│   │   │   ├── shared/      # Config, logger, DI container, Result type
-│   │   │   ├── infrastructure/  # Postgres, Redis, MongoDB clients
-│   │   │   └── modules/
-│   │   │       ├── keys/          # M03 — RSA/EC generation, AES encryption, JWKS, rotation
-│   │   │       ├── users/         # M04 — Registration, login, profiles, sessions
-│   │   │       ├── applications/  # M05 — App registry (SAML/OIDC/JWT)
-│   │   │       ├── oidc/          # M06 — oidc-provider, Redis adapter, PKCE
-│   │   │       ├── saml/          # M07 — IDP metadata, SSO, SLO, signed assertions
-│   │   │       ├── jwt-auth/      # M08 — RFC 7523 client assertions, mTLS
-│   │   │       ├── mfa/           # M09 — TOTP, backup codes
-│   │   │       ├── sessions/      # M10 — SSO session tracking, SLO fanout
-│   │   │       └── audit/         # M11 — BullMQ queue, MongoDB event store
+│   │   │   ├── modules/
+│   │   │   │   ├── organizations/    # Orgs, roles, user_roles
+│   │   │   │   ├── applications/     # Apps, scopes, SAML/OIDC/JWT configs
+│   │   │   │   ├── users/            # Users, profiles, MFA
+│   │   │   │   ├── keys/             # Per-org signing keys, JWKS
+│   │   │   │   ├── sessions/         # SSO sessions, SLO
+│   │   │   │   └── audit/            # BullMQ + MongoDB audit events
+│   │   │   ├── database/             # Drizzle schema re-exports
+│   │   │   ├── shared/               # Result monad, errors, config, logger
+│   │   │   └── server.ts
 │   │   └── drizzle/migrations/
-│   └── admin/               # M12 — Next.js 15 admin dashboard
-│       ├── src/app/
-│       │   ├── login/             # Admin key auth
-│       │   ├── dashboard/         # Overview cards + recent events
-│       │   ├── applications/      # App registry CRUD
-│       │   ├── users/             # User search, detail, MFA status
-│       │   ├── keys/              # Key status + rotation
-│       │   └── audit/             # Filterable event log
-│       └── src/lib/               # API client, auth helpers
+│   └── admin/                        # Next.js 15 admin dashboard
+│       └── src/app/
+│           ├── [orgId]/              # Org-scoped pages
+│           │   ├── dashboard/
+│           │   ├── applications/
+│           │   ├── users/
+│           │   ├── roles/
+│           │   ├── keys/
+│           │   ├── sessions/
+│           │   └── audit-logs/
+│           ├── admin/                # Super-admin pages
+│           │   └── orgs/
+│           ├── login/
+│           └── org-select/
 ├── packages/types/
 ├── tsconfig.base.json
 └── pnpm-workspace.yaml
 ```
+
+---
 
 ## Module Status
 
@@ -63,105 +270,27 @@ auth-idp/
 | M09 | MFA — TOTP (speakeasy), Argon2id backup codes, enrollment flow | ✅ Complete |
 | M10 | Session management — SSO session tracking, SLO fanout, admin revocation | ✅ Complete |
 | M11 | Audit logging — BullMQ queue, MongoDB event store, admin query API | ✅ Complete |
-| M12 | Admin dashboard — Next.js 15 | ✅ Complete |
-| M12a | Project setup + layout, sidebar nav, admin key auth, health page | ✅ Complete |
-| M12b | Key & application management — status card, rotate, register apps | ✅ Complete |
-| M12c | User management — search, detail view, MFA status, force-logout | ✅ Complete |
-| M12d | Audit log viewer — filterable, paginated table, event detail | ✅ Complete |
-| M12e | Dashboard overview — summary cards, recent events feed | ✅ Complete |
-| M13 | Deployment — Fly.io config, secrets, health checks, SP integration | 🔜 Next |
+| M12a | Admin dashboard — Next.js 15 project setup, layout, sidebar, health | ✅ Complete |
+| M12b | Admin dashboard — Key & application management | ✅ Complete |
+| M12c | Admin dashboard — User management, MFA status, force-logout | ✅ Complete |
+| M12d | Admin dashboard — Audit log viewer, filters, pagination | ✅ Complete |
+| M12e | Admin dashboard — Dashboard overview, summary cards | ✅ Complete |
+| **M13** | **Schema redesign — organizations as master entity, 13 tables** | **✅ Complete** |
+| M14 | Organizations API — CRUD, org creation, keypair bootstrap, org_admin seed | 🔜 Next |
+| M15 | Per-org Keys — org-scoped keypairs, JWKS, rotation lifecycle | ⏳ Pending |
+| M16 | Users & Roles — org-scoped users, role CRUD, requireOrgAdmin middleware | ⏳ Pending |
+| M17 | Applications & Scopes — org-namespaced apps, scope management | ⏳ Pending |
+| M18 | Protocol routes restructure — SAML/OIDC/JWT under /orgs/:orgId/... | ⏳ Pending |
+| M19 | Sessions & Audit Logs — org-scoped, tenant-filtered queries | ⏳ Pending |
+| M20 | UI routing restructure — /[orgId]/... dynamic routes, login flow, org switcher | ⏳ Pending |
+| M21 | Super-admin UI — /admin/orgs list, create, suspend | ⏳ Pending |
+| M22 | Org dashboard + Keys UI — /[orgId]/dashboard, /[orgId]/keys | ⏳ Pending |
+| M23 | Applications & Scopes UI — /[orgId]/applications, app detail + scopes | ⏳ Pending |
+| M24 | Users & Roles UI — /[orgId]/users, /[orgId]/roles, role assignment | ⏳ Pending |
+| M25 | Sessions & Audit Logs UI — /[orgId]/sessions, /[orgId]/audit-logs | ⏳ Pending |
+| M26 | Deployment — Fly.io for api + admin, secrets, health checks | ⏳ Pending |
 
-## API Endpoints
-
-### Authentication
-
-| Method | Path | Auth | Purpose |
-|---|---|---|---|
-| `POST` | `/auth/register` | Public | Create account |
-| `POST` | `/auth/login` | Public | Login, get session token |
-| `POST` | `/auth/logout` | Session | Logout |
-| `GET` | `/auth/me` | Session | Get current user profile |
-| `PATCH` | `/auth/me` | Session | Update profile |
-
-### Key Management
-
-| Method | Path | Auth | Purpose |
-|---|---|---|---|
-| `GET` | `/.well-known/jwks.json` | Public | JWKS public keys |
-| `POST` | `/api/v1/admin/keys/generate` | Admin | Generate signing key |
-| `POST` | `/api/v1/admin/keys/rotate` | Admin | Rotate signing key |
-
-### Application Registry
-
-| Method | Path | Auth | Purpose |
-|---|---|---|---|
-| `POST` | `/api/v1/admin/applications` | Admin | Register SAML/OIDC/JWT app |
-| `GET` | `/api/v1/admin/applications` | Admin | List all apps |
-| `GET` | `/api/v1/admin/applications/:id` | Admin | Get app with protocol config |
-| `PATCH` | `/api/v1/admin/applications/:id` | Admin | Update app |
-
-### User Management (Admin)
-
-| Method | Path | Auth | Purpose |
-|---|---|---|---|
-| `GET` | `/api/v1/admin/users` | Admin | List/search users |
-| `GET` | `/api/v1/admin/users/:id` | Admin | User detail with profile + MFA |
-
-### OIDC / OAuth 2.0
-
-| Endpoint | Purpose |
-|---|---|
-| `GET /.well-known/openid-configuration` | Discovery document |
-| `GET /oidc/jwks` | JWKS |
-| `GET /oidc/auth` | Authorization endpoint |
-| `POST /oidc/token` | Token endpoint |
-| `GET /oidc/userinfo` | User info |
-| `POST /oidc/introspect` | Token introspection |
-| `POST /oidc/revoke` | Token revocation |
-| `GET /oidc/end_session` | Logout |
-
-### SAML 2.0
-
-| Endpoint | Purpose |
-|---|---|
-| `GET /saml/:appId/metadata` | IDP metadata XML |
-| `POST /saml/:appId/sso` | SSO entry point |
-| `POST /saml/:appId/sso/login` | Credential submit during SSO |
-| `POST /saml/:appId/slo` | Single Logout |
-
-### JWT / Certificate Auth
-
-| Endpoint | Purpose |
-|---|---|
-| `POST /auth/token/jwt-assertion` | RFC 7523 client assertion |
-| `POST /auth/token/mtls` | mTLS certificate auth |
-
-### MFA
-
-| Endpoint | Auth | Purpose |
-|---|---|---|
-| `GET /auth/mfa/status` | Session | Check MFA enrollment |
-| `POST /auth/mfa/totp/setup` | Session | Generate TOTP secret |
-| `POST /auth/mfa/totp/verify` | Session | Verify and activate MFA |
-| `POST /auth/mfa/totp/validate` | Session | Validate code during login |
-| `POST /auth/mfa/backup-codes/generate` | Session | Generate backup codes |
-| `POST /auth/mfa/backup-codes/use` | Session | Consume backup code |
-
-### Session Management
-
-| Endpoint | Auth | Purpose |
-|---|---|---|
-| `GET /auth/sessions` | Session | List active SSO sessions |
-| `DELETE /auth/sessions/:id` | Session | Revoke specific session |
-| `DELETE /auth/sessions` | Session | Revoke all (global logout) |
-| `POST /api/v1/admin/sessions/revoke/:userId` | Admin | Force-logout user |
-
-### Audit Logging
-
-| Endpoint | Auth | Purpose |
-|---|---|---|
-| `GET /api/v1/admin/audit` | Admin | Query audit events |
-| `GET /api/v1/admin/audit/:id` | Admin | Get event detail |
+---
 
 ## Tech Stack
 
@@ -178,24 +307,14 @@ auth-idp/
 | Logging | Pino + pino-pretty | Structured JSON logging |
 | Password hashing | Argon2id | OWASP-recommended parameters |
 | OIDC / OAuth 2.0 | oidc-provider | Full spec compliance |
-| SAML 2.0 | samlify + node-forge | IDP metadata, SSO, SLO |
+| SAML 2.0 | samlify + node-forge | IDP metadata, SSO, SLO, signed assertions |
 | JWT signing | jose | JWK export, SPKI import, SignJWT |
 | Key crypto | Node.js crypto (built-in) | RSA/EC generation, AES-256-GCM |
+| Cert handling | node-forge | X.509 cert generation, thumbprint extraction |
 | TOTP | speakeasy | TOTP generation and verification |
-| Admin UI | Next.js 15 + Tailwind CSS | Admin dashboard |
-| Deployment | Fly.io | API + admin hosting |
+| Admin UI | Next.js 15 + Tailwind | Admin dashboard |
 
-## Admin Dashboard
-
-The admin dashboard runs on `http://localhost:3001` and provides:
-
-- **Dashboard** — summary cards (total users, registered apps, 24h failures, active key) + recent activity feed
-- **Keys** — view active signing key details, rotate with confirmation
-- **Applications** — list all apps, register new (SAML/OIDC/JWT with protocol-specific fields), view detail
-- **Users** — search by email/status, view profile + MFA factors, force-logout
-- **Audit Log** — filterable table (type, outcome, user, date range), click to expand full event detail with metadata
-- **Health** — API connectivity status with uptime
-- **Dark/Light mode** — toggle in sidebar, respects system preference
+---
 
 ## Troubleshooting
 
@@ -205,17 +324,18 @@ The admin dashboard runs on `http://localhost:3001` and provides:
 | `Redis max retries reached` | Use `rediss://` (double s) from Redis Cloud |
 | `MongoDB not connected` | Check Atlas Network Access — add your IP |
 | `401` on admin routes | Exact `ADMIN_API_KEY` — no quotes, no spaces |
-| `409` on key generate | Key exists — use `/rotate` |
-| SP rejects SAML assertion | Import IDP cert from `/saml/:id/metadata` into SP trusted certs |
+| `signing_keys organization_id NOT NULL` | Remove `bootstrapSigningKeys` call from `server.ts` — keys are now per-org |
+| SP rejects SAML assertion | Import IDP cert from `/orgs/:orgId/saml/:appId/metadata` into SP trusted certs |
 | `invalid_client` on OIDC token | Wrong `client_secret` or PKCE verifier mismatch |
 | JWT assertion `UNAUTHORIZED` | `client_id` must be the app UUID, not the slug |
 | mTLS thumbprint mismatch | Strip with `sed 's/.*Fingerprint=//;s/://g'` — no prefix, lowercase |
 | TOTP always invalid | Clock skew — generate and submit within the same 30s window |
-| Session `DATABASE_ERROR` on admin revoke | `userId` must be a valid UUID |
 | Audit events not appearing | BullMQ is async — wait 2s after action before querying |
 | BullMQ eviction warning | Set Redis eviction policy to `noeviction` in Redis Cloud settings |
+| Array default syntax error in migration | Use `sql\`'{}'::text[]\`` for all array defaults in Drizzle schema |
 | Admin dashboard login fails | Ensure `API_BASE_URL` in `apps/admin/.env` matches running API |
-| Health page shows unreachable | API must be running on port 3000 |
+
+---
 
 ## License
 

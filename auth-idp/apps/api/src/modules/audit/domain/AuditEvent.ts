@@ -39,5 +39,6 @@ export class AuditEvent {
     public readonly userAgent: string | null,
     public readonly metadata: Record<string, unknown>,
     public readonly occurredAt: Date,
+    public readonly organizationId: string
   ) {}
 }
