@@ -2,36 +2,47 @@ import { eq } from 'drizzle-orm'
 import { ok, err } from '../../../shared/result/Result.js'
 import type { Result } from '../../../shared/result/Result.js'
 import { DatabaseError, NotFoundError, ConflictError } from '../../../shared/errors/AppError.js'
-import type { Logger } from '../../../shared/logger/logger.js'
 import type { DrizzleClient } from '../../../infrastructure/database/postgres.client.js'
-import { applications, samlConfigs, oidcClients, jwtConfigs } from '../../../database/index.js'
-import type {
-  Application as AppRow, SamlConfig as SamlRow,
-  OidcClient as OidcRow, JwtConfig as JwtRow, ApplicationStatus,
-} from '../../../database/index.js'
+import {
+  applications,
+  samlConfigs,
+  oidcClients,
+  jwtConfigs,
+} from './applications.schema.js'
+import type { ApplicationStatus } from '../../../shared/types/domain-types.js'
 import { Application, SamlConfig, OidcClient, JwtConfig } from '../domain/Application.js'
 import type {
   IApplicationRepository, ApplicationWithConfig,
   CreateApplicationInput, CreateSamlConfigInput,
   CreateOidcClientInput, CreateJwtConfigInput, UpdateApplicationInput,
 } from '../application/ports/IApplicationRepository.js'
+import { sql } from 'drizzle-orm'
 
-interface Deps { db: DrizzleClient; logger: Logger }
+type AppRow = typeof applications.$inferSelect
+type SamlRow = typeof samlConfigs.$inferSelect
+type OidcRow = typeof oidcClients.$inferSelect
+type JwtRow = typeof jwtConfigs.$inferSelect
+
+interface Deps { db: DrizzleClient; }
 
 export class SupabaseApplicationRepository implements IApplicationRepository {
   private readonly db: DrizzleClient
-  private readonly logger: Logger
-  constructor({ db, logger }: Deps) {
+
+  constructor({ db }: Deps) {
     this.db = db
-    this.logger = logger.child({ repository: 'ApplicationRepository' })
   }
 
   async save(input: CreateApplicationInput): Promise<Result<Application, DatabaseError | ConflictError>> {
     try {
-      const rows = await this.db.insert(applications).values({
-        name: input.name, slug: input.slug,
-        protocol: input.protocol as AppRow['protocol'],
-        logoUrl: input.logoUrl, description: input.description,
+      const rows = await this.db
+      .insert(applications)
+      .values({
+        organizationId: '',        // ← ADD — placeholder until M17
+        name:           input.name,
+        slug:           input.slug,
+        protocol:       input.protocol as AppRow['protocol'],
+        logoUrl:        input.logoUrl,
+        description:    input.description,
       }).returning()
       return ok(this.toDomain(rows[0]!))
     } catch (e: unknown) {
@@ -129,15 +140,24 @@ export class SupabaseApplicationRepository implements IApplicationRepository {
 
   async saveOidcClient(input: CreateOidcClientInput): Promise<Result<OidcClient, DatabaseError>> {
     try {
-      const rows = await this.db.insert(oidcClients).values({
-        applicationId: input.applicationId, clientId: input.clientId,
-        clientSecretHash: input.clientSecretHash, redirectUris: input.redirectUris,
-        postLogoutUris: input.postLogoutUris ?? [], grantTypes: input.grantTypes ?? ['authorization_code'],
-        responseTypes: input.responseTypes ?? ['code'],
-        scopes: input.scopes ?? ['openid', 'profile', 'email'],
-        tokenEndpointAuth: input.tokenEndpointAuth ?? 'client_secret_basic',
-        pkceRequired: input.pkceRequired ?? true,
-        accessTokenTtl: input.accessTokenTtl, refreshTokenTtl: input.refreshTokenTtl,
+      const rows = await this.db
+      .insert(oidcClients)
+      .values({
+        applicationId:           input.applicationId,
+        clientId:                input.clientId,
+        clientSecretHash:        input.clientSecretHash,
+        redirectUris:            sql`${JSON.stringify(input.redirectUris)}::text[]`,
+        postLogoutRedirectUris:  sql`${JSON.stringify(input.postLogoutUris ?? [])}::text[]`,        // ← postLogoutUris
+        grantTypes:              sql`${JSON.stringify(input.grantTypes ?? ['authorization_code'])}::text[]`,
+        responseTypes:           sql`${JSON.stringify(input.responseTypes ?? ['code'])}::text[]`,
+        scopes:                  Array.isArray(input.scopes)
+                                  ? input.scopes.join(' ')
+                                  : (input.scopes ?? 'openid profile email'),
+        requirePkce:             input.pkceRequired ?? true,                                        // ← pkceRequired
+        tokenEndpointAuthMethod: input.tokenEndpointAuth ?? 'client_secret_basic',                  // ← tokenEndpointAuth
+        accessTokenTtl:          input.accessTokenTtl ?? 3600,
+        refreshTokenTtl:         input.refreshTokenTtl ?? 86400,
+        idTokenTtl:              3600,                                                               // ← not in input, use default
       }).returning()
       return ok(this.toOidcDomain(rows[0]!))
     } catch (e) { return err(new DatabaseError('Failed to create OIDC client', e)) }
@@ -145,11 +165,16 @@ export class SupabaseApplicationRepository implements IApplicationRepository {
 
   async saveJwtConfig(input: CreateJwtConfigInput): Promise<Result<JwtConfig, DatabaseError>> {
     try {
-      const rows = await this.db.insert(jwtConfigs).values({
-        applicationId: input.applicationId, signingAlgorithm: input.signingAlgorithm ?? 'RS256',
-        publicKey: input.publicKey, certThumbprint: input.certThumbprint,
-        tokenLifetime: input.tokenLifetime ?? 3600,
-        audience: input.audience ?? [], customClaims: input.customClaims ?? {},
+      const rows = await this.db
+      .insert(jwtConfigs)
+      .values({
+        applicationId:         input.applicationId,
+        clientId:              input.applicationId,                                                  // ← use applicationId as placeholder until M17
+        allowedAlgorithms:     sql`${JSON.stringify([input.signingAlgorithm ?? 'RS256'])}::text[]`,
+        allowedAudiences:      sql`${JSON.stringify(input.audience ?? [])}::text[]`,
+        certificateThumbprint: input.certThumbprint ?? null,
+        tokenTtl:              input.tokenLifetime ?? 3600,
+        requireMtls:           false,
       }).returning()
       return ok(this.toJwtDomain(rows[0]!))
     } catch (e) { return err(new DatabaseError('Failed to create JWT config', e)) }

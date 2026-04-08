@@ -1,29 +1,31 @@
-import type { KeyAlgorithm, KeyStatus, KeyUse } from '../../../shared/types/domain-types.js'
+import type { KeyAlgorithm, KeyStatus } from '../../../shared/types/domain-types.js'
 
 export class SigningKey {
   constructor(
     public readonly id: string,
+    public readonly organizationId: string,
     public readonly kid: string,
     public readonly algorithm: KeyAlgorithm,
-    public readonly use: KeyUse,
     public readonly status: KeyStatus,
     public readonly publicKeyPem: string,
+    public readonly publicKeyJwk: string,
     public readonly encryptedPrivateKey: string,
     public readonly encryptionIv: string,
     public readonly expiresAt: Date | null,
     public readonly createdAt: Date,
     public readonly rotatedAt: Date | null,
-    public readonly revokedAt: Date | null,
   ) {}
 
-  isActive(): boolean { return this.status === 'active' }
+  canSign(): boolean {
+    return this.status === 'active' && !this.isExpired()
+  }
+
+  canVerify(): boolean {
+    return this.status !== 'revoked'
+  }
 
   isExpired(): boolean {
     if (!this.expiresAt) return false
-    return new Date() > this.expiresAt
+    return this.expiresAt < new Date()
   }
-
-  canSign(): boolean { return this.status === 'active' && !this.isExpired() }
-
-  canVerify(): boolean { return this.status !== 'revoked' }
 }

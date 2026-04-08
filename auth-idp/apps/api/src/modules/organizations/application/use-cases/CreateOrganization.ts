@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto'
 import { z } from 'zod'
-import { ok, err } from '../../../../shared/result/Result.js'
+import { ok, err, isErr, isOk } from '../../../../shared/result/Result.js'
 import type { Result } from '../../../../shared/result/Result.js'
 import type { AppError } from '../../../../shared/errors/AppError.js'
 import { ValidationError, ConflictError, InternalError } from '../../../../shared/errors/AppError.js'
@@ -62,7 +62,7 @@ export class CreateOrganizationUseCase {
 
     // 2 — Check slug uniqueness
     const existing = await this.organizationRepository.findBySlug(slug)
-    if (existing.isOk()) {
+    if (isOk(existing)) {
       return err(new ConflictError(`Organization slug "${slug}" is already taken`))
     }
 
@@ -75,16 +75,16 @@ export class CreateOrganizationUseCase {
       slug,
       logoUrl,
     })
-    if (orgResult.isErr()) return err(orgResult.error)
+    if (isErr(orgResult)) return err(orgResult.error)
 
     // 4 — Generate RSA-2048 keypair for this org
     const keyPair = await this.keyGenerationService.generateKeyPair('RS256')
-    if (keyPair.isErr()) {
+    if (isErr(keyPair)) {
       return err(new InternalError('Failed to generate signing key for organization'))
     }
 
     const encrypted = await this.keyEncryptionService.encrypt(keyPair.value.privateKeyPem)
-    if (encrypted.isErr()) {
+    if (isErr(encrypted)) {
       return err(new InternalError('Failed to encrypt signing key'))
     }
 
@@ -100,7 +100,7 @@ export class CreateOrganizationUseCase {
         encryptionIv: encrypted.value.iv,
         expiresAt: null,
     })
-    if (keyResult.isErr()) {
+    if (isErr(keyResult)) {
       return err(new InternalError('Failed to save signing key for organization'))
     }
 
@@ -113,7 +113,7 @@ export class CreateOrganizationUseCase {
       description: 'Full administrative access to this organization',
       isSystem: true,
     })
-    if (roleResult.isErr()) {
+    if (isErr(roleResult)) {
       return err(new InternalError('Failed to seed org_admin role'))
     }
 
@@ -124,7 +124,7 @@ export class CreateOrganizationUseCase {
       roleId,
       assignedBy: creatingUserId,
     })
-    if (assignResult.isErr()) {
+    if (isErr(assignResult)) {
       return err(new InternalError('Failed to assign org_admin role to creating user'))
     }
 

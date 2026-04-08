@@ -1,6 +1,6 @@
 import type { Result } from '../../../../shared/result/Result.js'
 import type { DatabaseError, NotFoundError, ConflictError } from '../../../../shared/errors/AppError.js'
-import type { ApplicationStatus } from '../../../../database/index.js'
+import type { ApplicationStatus } from '../../../../shared/types/domain-types.js'
 import type { Application, SamlConfig, OidcClient, JwtConfig } from '../../domain/Application.js'
 
 export interface ApplicationWithConfig {
@@ -11,7 +11,7 @@ export interface ApplicationWithConfig {
 }
 
 export interface CreateApplicationInput {
-  name: string; slug: string; protocol: string; logoUrl?: string; description?: string
+  organizationId?: string; name: string; slug: string; protocol: string; logoUrl?: string; description?: string
 }
 
 export interface CreateSamlConfigInput {

@@ -1,4 +1,4 @@
-import { ok, err } from '../../../../shared/result/Result.js'
+import { err, isErr } from '../../../../shared/result/Result.js'
 import type { Result } from '../../../../shared/result/Result.js'
 import type { AppError } from '../../../../shared/errors/AppError.js'
 import { ValidationError, UnauthorizedError } from '../../../../shared/errors/AppError.js'
@@ -41,7 +41,7 @@ export class HandleJwtAssertionUseCase {
     }
 
     const appResult = await applicationRepository.findWithConfig(cmd.clientId)
-    if (appResult.isErr()) return err(appResult.error)
+    if (isErr(appResult)) return err(appResult.error)
     const { application, jwtConfig } = appResult.value
 
     if (!jwtConfig) {
@@ -60,17 +60,17 @@ export class HandleJwtAssertionUseCase {
       config.IDP_BASE_URL,
       cmd.clientId,
     )
-    if (verifyResult.isErr()) return err(verifyResult.error)
+    if (isErr(verifyResult)) return err(verifyResult.error)
 
     const keyResult = await signingKeyRepository.findActiveSigningKey()
-    if (keyResult.isErr()) return err(keyResult.error)
+    if (isErr(keyResult)) return err(keyResult.error)
     const signingKey = keyResult.value
 
     const decryptResult = await keyEncryptionService.decrypt(
       signingKey.encryptedPrivateKey,
       signingKey.encryptionIv,
     )
-    if (decryptResult.isErr()) return err(decryptResult.error)
+    if (isErr(decryptResult)) return err(decryptResult.error)
 
     logger.info({ clientId: cmd.clientId, kid: signingKey.kid }, 'Issuing JWT access token via client assertion')
 

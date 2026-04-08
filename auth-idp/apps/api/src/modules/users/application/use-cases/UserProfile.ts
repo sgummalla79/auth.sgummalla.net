@@ -4,26 +4,27 @@ import type { Result } from '../../../../shared/result/Result.js'
 import type { AppError } from '../../../../shared/errors/AppError.js'
 import { ValidationError } from '../../../../shared/errors/AppError.js'
 import type { Logger } from '../../../../shared/logger/logger.js'
-import type { User } from '../domain/User.js'
-import type { UserProfile } from '../domain/UserProfile.js'
+import type { User } from '../../domain/User.js'
+import type { UserProfile } from '../../domain/UserProfile.js'
 import type { IUserRepository } from '../ports/IUserRepository.js'
+import { isErr } from '../../../../shared/result/Result.js'
 
-interface GetDeps { userRepository: IUserRepository; logger: Logger }
+interface GetDeps { userRepository: IUserRepository; }
 
 export interface GetUserProfileResult { user: User; profile: UserProfile }
 
 export class GetUserProfileUseCase {
   private readonly repo: IUserRepository
-  private readonly logger: Logger
-  constructor({ userRepository, logger }: GetDeps) { this.repo = userRepository; this.logger = logger }
+
+  constructor({ userRepository }: GetDeps) { this.repo = userRepository; }
 
   async execute(userId: string): Promise<Result<GetUserProfileResult, AppError>> {
     const [userResult, profileResult] = await Promise.all([
       this.repo.findById(userId),
       this.repo.findProfile(userId),
     ])
-    if (userResult.isErr()) return err(userResult.error)
-    if (profileResult.isErr()) return err(profileResult.error)
+    if (isErr(userResult)) return err(userResult.error)
+    if (isErr(profileResult)) return err(profileResult.error)
     return ok({ user: userResult.value, profile: profileResult.value })
   }
 }
@@ -56,7 +57,7 @@ export class UpdateUserProfileUseCase {
       return err(new ValidationError('Invalid profile data', fields))
     }
     const result = await this.repo.updateProfile(userId, parsed.data)
-    if (result.isErr()) return err(result.error)
+    if (isErr(result)) return err(result.error)
     this.logger.info({ userId }, 'Profile updated')
     return ok(result.value)
   }

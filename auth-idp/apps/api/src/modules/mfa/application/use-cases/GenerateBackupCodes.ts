@@ -1,4 +1,4 @@
-import { ok, err } from '../../../../shared/result/Result.js'
+import { ok, err, isErr, isOk } from '../../../../shared/result/Result.js'
 import type { Result } from '../../../../shared/result/Result.js'
 import type { AppError } from '../../../../shared/errors/AppError.js'
 import { ValidationError } from '../../../../shared/errors/AppError.js'
@@ -19,7 +19,7 @@ export class GenerateBackupCodesUseCase {
     const { mfaRepository, backupCodeService, logger } = this.deps
 
     const mfaResult = await mfaRepository.getMfaData(userId)
-    if (mfaResult.isErr()) return err(mfaResult.error)
+    if (isErr(mfaResult)) return err(mfaResult.error)
 
     if (!mfaResult.value.mfaEnabled) {
       return err(new ValidationError('MFA must be enabled before generating backup codes'))
@@ -28,13 +28,13 @@ export class GenerateBackupCodesUseCase {
     const plaintextCodes = backupCodeService.generate(10)
     const hashedResults = await Promise.all(plaintextCodes.map(c => backupCodeService.hash(c)))
 
-    const failed = hashedResults.find(r => r.isErr())
-    if (failed?.isErr()) return err(failed.error)
+    const failed = hashedResults.find(r => isErr(r))
+    if (failed && isErr(failed)) return err(failed.error)
 
-    const hashes = hashedResults.map(r => (r.isOk() ? r.value : ''))
+    const hashes = hashedResults.map(r => (isOk(r) ? r.value : ''))
 
     const saveResult = await mfaRepository.saveBackupCodes(userId, hashes)
-    if (saveResult.isErr()) return err(saveResult.error)
+    if (isErr(saveResult)) return err(saveResult.error)
 
     logger.info({ userId }, 'Backup codes regenerated')
     return ok(plaintextCodes)

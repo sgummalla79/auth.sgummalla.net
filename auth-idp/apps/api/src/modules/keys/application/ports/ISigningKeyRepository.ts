@@ -13,10 +13,11 @@ export interface ISigningKeyRepository {
 
 export interface CreateSigningKeyInput {
   kid: string
+  organizationId: string
   algorithm: string
-  use: string
   status: string
   publicKeyPem: string
+  publicKeyJwk: string
   encryptedPrivateKey: string
   encryptionIv: string
   expiresAt: Date | null

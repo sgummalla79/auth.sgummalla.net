@@ -1,4 +1,4 @@
-import { ok, err } from '../../../../shared/result/Result.js'
+import { ok, err, isErr } from '../../../../shared/result/Result.js'
 import type { Result } from '../../../../shared/result/Result.js'
 import type { AppError } from '../../../../shared/errors/AppError.js'
 import type { Logger } from '../../../../shared/logger/logger.js'
@@ -19,12 +19,12 @@ export class RevokeAllSessionsUseCase {
 
     // Collect all active sessions for fanout before revoking
     const sessionsResult = await ssoSessionRepository.findActiveByUserId(userId)
-    if (sessionsResult.isErr()) return err(sessionsResult.error)
+    if (isErr(sessionsResult)) return err(sessionsResult.error)
     const sessions = sessionsResult.value
 
     // Revoke all in DB
     const revokeResult = await ssoSessionRepository.revokeAllForUser(userId)
-    if (revokeResult.isErr()) return err(revokeResult.error)
+    if (isErr(revokeResult)) return err(revokeResult.error)
 
     // Fan out SLO to all participating apps across all sessions
     const allApps = sessions.flatMap(s => s.participatingApps)
