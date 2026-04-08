@@ -6,6 +6,9 @@ export interface CreateSsoSessionInput {
   userId: string
   idpSessionToken: string
   expiresInSeconds?: number
+  organizationId?:  string   // ← ADD — placeholder until M19
+  ipAddress?:       string   // ← ADD
+  userAgent?:       string   // ← ADD
 }
 
 export interface ISsoSessionRepository {

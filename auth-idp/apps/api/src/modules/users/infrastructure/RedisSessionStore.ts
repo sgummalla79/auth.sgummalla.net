@@ -2,17 +2,16 @@ import { randomBytes } from 'crypto'
 import { ok, err } from '../../../shared/result/Result.js'
 import type { Result } from '../../../shared/result/Result.js'
 import { CacheError, NotFoundError } from '../../../shared/errors/AppError.js'
-import type { Logger } from '../../../shared/logger/logger.js'
 import type { Redis } from 'ioredis'
 import type { ISessionStore, SessionData } from '../application/ports/ISessionStore.js'
 
 const KEY_PREFIX = 'idp:session:'
-interface Deps { redis: Redis; logger: Logger }
+interface Deps { redis: Redis; }
 
 export class RedisSessionStore implements ISessionStore {
   private readonly redis: Redis
-  private readonly logger: Logger
-  constructor({ redis, logger }: Deps) { this.redis = redis; this.logger = logger.child({ store: 'SessionStore' }) }
+  
+  constructor({ redis }: Deps) { this.redis = redis; }
 
   async create(userId: string, email: string, ttlSeconds: number): Promise<Result<string, CacheError>> {
     try {

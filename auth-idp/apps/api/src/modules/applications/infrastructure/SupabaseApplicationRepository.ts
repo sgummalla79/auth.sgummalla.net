@@ -193,7 +193,7 @@ export class SupabaseApplicationRepository implements IApplicationRepository {
       const jwtRow = await this.db
         .select()
         .from(jwtConfigs)
-        .where(eq(jwtConfigs.certThumbprint, thumbprint))
+        .where(eq(jwtConfigs.certificateThumbprint, thumbprint))
         .limit(1)
         .then(rows => rows[0])
 
@@ -219,14 +219,33 @@ export class SupabaseApplicationRepository implements IApplicationRepository {
   }
 
   private toOidcDomain(row: OidcRow): OidcClient {
-    return new OidcClient(row.id, row.applicationId, row.clientId, row.clientSecretHash,
-      row.redirectUris, row.postLogoutUris, row.grantTypes, row.responseTypes,
-      row.scopes, row.tokenEndpointAuth, row.pkceRequired, row.accessTokenTtl, row.refreshTokenTtl)
-  }
+  return new OidcClient(
+    row.id,
+    row.applicationId,
+    row.clientId,
+    row.clientSecretHash ?? '',
+    row.redirectUris,
+    row.postLogoutRedirectUris,
+    row.grantTypes,
+    row.responseTypes,
+    row.scopes.split(' '),           // ← string → string[] split on space
+    row.tokenEndpointAuthMethod,
+    row.requirePkce,
+    row.accessTokenTtl,
+    row.refreshTokenTtl,
+  )
+}
 
   private toJwtDomain(row: JwtRow): JwtConfig {
-    return new JwtConfig(row.id, row.applicationId, row.signingAlgorithm,
-      row.publicKey, row.certThumbprint, row.tokenLifetime,
-      row.audience, row.customClaims as Record<string, unknown>)
-  }
+  return new JwtConfig(
+    row.id,
+    row.applicationId,
+    row.allowedAlgorithms[0] ?? 'RS256',  // ← was signingAlgorithm, schema stores as array
+    null,                                  // ← publicKey doesn't exist in new schema
+    row.certificateThumbprint,
+    row.tokenTtl,
+    row.allowedAudiences,                  // ← was audience
+    {},                                    // ← customClaims doesn't exist in new schema
+  )
+}
 }

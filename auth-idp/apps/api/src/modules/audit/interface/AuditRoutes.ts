@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import type { Cradle } from '../../../shared/container/index.js'
 import type { AuditEventType } from '../domain/AuditEvent.js'
+import { isErr } from '../../../shared/result/Result.js'
 
 export async function registerAuditRoutes(app: FastifyInstance): Promise<void> {
 
@@ -35,7 +36,7 @@ export async function registerAuditRoutes(app: FastifyInstance): Promise<void> {
         offset: q.offset ? parseInt(q.offset, 10) : 0,
       })
 
-      if (result.isErr()) throw result.error
+      if (isErr(result)) throw result.error
 
       return reply.send({
         events: result.value.map(e => ({
@@ -62,7 +63,7 @@ export async function registerAuditRoutes(app: FastifyInstance): Promise<void> {
 
       const { getAuditEventUseCase } = request.container.cradle as Cradle
       const result = await getAuditEventUseCase.execute(request.params.eventId)
-      if (result.isErr()) throw result.error
+      if (isErr(result)) throw result.error
 
       const e = result.value
       return reply.send({

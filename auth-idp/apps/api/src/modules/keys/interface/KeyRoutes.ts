@@ -38,7 +38,7 @@ export async function registerKeyRoutes(
   // Public JWKS endpoint
   app.get('/.well-known/jwks.json',
     { config: { rateLimit: { max: 300, timeWindow: '1 minute' } } },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (_request: FastifyRequest, reply: FastifyReply) => {
       const result = await getJwksUseCase.execute()
       if (isErr(result)) {
         return reply.status(500).send({ code: 'INTERNAL_ERROR', message: 'Failed to retrieve keys' })

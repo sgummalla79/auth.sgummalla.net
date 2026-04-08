@@ -35,7 +35,7 @@ export async function registerAdminUserRoutes(app: FastifyInstance, { db, config
       const conditions = []
       if (query.email) conditions.push(ilike(users.email, `%${query.email}%`))
       if (query.status) {
-        conditions.push(eq(users.status, query.status as 'active' | 'inactive' | 'suspended' | 'pending_verification'))
+        conditions.push(eq(users.status, query.status as 'active' | 'inactive' | 'suspended'))
       }
 
       const where = conditions.length > 0 ? and(...conditions) : undefined
@@ -46,8 +46,6 @@ export async function registerAdminUserRoutes(app: FastifyInstance, { db, config
           email: users.email,
           emailVerified: users.emailVerified,
           status: users.status,
-          mfaEnabled: users.mfaEnabled,
-          lastLoginAt: users.lastLoginAt,
           createdAt: users.createdAt,
         })
         .from(users)
@@ -81,11 +79,9 @@ export async function registerAdminUserRoutes(app: FastifyInstance, { db, config
       const mfaFactors = await db
         .select({
           id: userMfa.id,
-          type: userMfa.type,
+          factorType: userMfa.factorType,
           verified: userMfa.verified,
-          name: userMfa.name,
           createdAt: userMfa.createdAt,
-          lastUsedAt: userMfa.lastUsedAt,
         })
         .from(userMfa)
         .where(eq(userMfa.userId, userId))
@@ -95,19 +91,17 @@ export async function registerAdminUserRoutes(app: FastifyInstance, { db, config
         email: user.email,
         emailVerified: user.emailVerified,
         status: user.status,
-        mfaEnabled: user.mfaEnabled,
         failedLoginAttempts: user.failedLoginAttempts,
         lockedUntil: user.lockedUntil,
-        lastLoginAt: user.lastLoginAt,
         createdAt: user.createdAt,
         profile: profile
           ? {
-              givenName: profile.givenName,
-              familyName: profile.familyName,
+              firstName: profile.firstName,
+              lastName: profile.lastName,
               displayName: profile.displayName,
               pictureUrl: profile.pictureUrl,
               locale: profile.locale,
-              zoneinfo: profile.zoneinfo,
+              zoneInfo: profile.zoneInfo,
             }
           : null,
         mfaFactors,

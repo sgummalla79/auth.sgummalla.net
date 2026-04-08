@@ -91,14 +91,15 @@ export class CreateOrganizationUseCase {
     const kid = `${slug}-${Date.now()}`
 
     const keyResult = await this.signingKeyRepository.save({
-        kid,
-        algorithm: 'RS256',
-        use: 'sig',
-        status: 'active',
-        publicKeyPem: keyPair.value.publicKeyPem,
-        encryptedPrivateKey: encrypted.value.ciphertext,
-        encryptionIv: encrypted.value.iv,
-        expiresAt: null,
+      kid,
+      organizationId:      orgId,
+      algorithm:           'RS256',
+      status:              'active',
+      publicKeyPem:        keyPair.value.publicKeyPem,
+      publicKeyJwk:        '',                              // ← placeholder, M15 will derive this properly
+      encryptedPrivateKey: encrypted.value.ciphertext,      // ← was encryptedData
+      encryptionIv:        encrypted.value.iv,
+      expiresAt:           null,
     })
     if (isErr(keyResult)) {
       return err(new InternalError('Failed to save signing key for organization'))

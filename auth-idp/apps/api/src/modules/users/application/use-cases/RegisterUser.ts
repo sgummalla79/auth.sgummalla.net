@@ -1,10 +1,10 @@
 import { z } from 'zod'
-import { ok, err } from '../../../../shared/result/Result.js'
+import { ok, err, isErr, isOk } from '../../../../shared/result/Result.js'
 import type { Result } from '../../../../shared/result/Result.js'
 import type { AppError } from '../../../../shared/errors/AppError.js'
 import { ValidationError, ConflictError } from '../../../../shared/errors/AppError.js'
 import type { Logger } from '../../../../shared/logger/logger.js'
-import type { User } from '../domain/User.js'
+import type { User } from '../../domain/User.js'
 import type { IUserRepository } from '../ports/IUserRepository.js'
 import type { IHashService } from '../ports/IHashService.js'
 
@@ -60,15 +60,15 @@ export class RegisterUserUseCase {
     this.logger.info({ email }, 'User registration attempt')
 
     const existing = await this.repo.findByEmail(email)
-    if (existing.isOk()) {
+    if (isOk(existing)) {
       return err(new ConflictError('An account with this email already exists'))
     }
 
     const hashResult = await this.hash.hash(password)
-    if (hashResult.isErr()) return err(hashResult.error)
+    if (isErr(hashResult)) return err(hashResult.error)
 
     const saveResult = await this.repo.save({ email, passwordHash: hashResult.value })
-    if (saveResult.isErr()) return err(saveResult.error)
+    if (isErr(saveResult)) return err(saveResult.error)
 
     const user = saveResult.value
 

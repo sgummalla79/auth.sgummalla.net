@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { ok, err } from '../../../../shared/result/Result.js'
+import { ok, err, isErr } from '../../../../shared/result/Result.js'
 import type { Result } from '../../../../shared/result/Result.js'
 import type { AppError } from '../../../../shared/errors/AppError.js'
 import { ValidationError, UnauthorizedError } from '../../../../shared/errors/AppError.js'
@@ -54,7 +54,7 @@ export class LoginUserUseCase {
     const { email, password } = parsed.data
 
     const userResult = await this.repo.findByEmail(email)
-    if (userResult.isErr()) {
+    if (isErr(userResult)) {
       // Timing-safe: hash even for unknown users to prevent enumeration
       await this.hash.verify('$argon2id$v=19$m=65536,t=3,p=4$dummy$dummy', password)
       return err(new UnauthorizedError('Invalid email or password'))
@@ -72,7 +72,7 @@ export class LoginUserUseCase {
     if (!user.passwordHash) return err(new UnauthorizedError('Invalid email or password'))
 
     const verifyResult = await this.hash.verify(user.passwordHash, password)
-    if (verifyResult.isErr()) return err(verifyResult.error)
+    if (isErr(verifyResult)) return err(verifyResult.error)
 
     if (!verifyResult.value) {
       await this.repo.incrementFailedLogins(user.id)
@@ -95,7 +95,7 @@ export class LoginUserUseCase {
     await this.repo.updateLastLogin(user.id)
 
     const sessionResult = await this.sessions.create(user.id, email, SESSION_TTL_SECONDS)
-    if (sessionResult.isErr()) return err(sessionResult.error)
+    if (isErr(sessionResult)) return err(sessionResult.error)
 
     const expiresAt = new Date(Date.now() + SESSION_TTL_SECONDS * 1000)
 

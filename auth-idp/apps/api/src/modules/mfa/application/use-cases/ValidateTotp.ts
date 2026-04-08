@@ -1,4 +1,4 @@
-import { ok, err } from '../../../../shared/result/Result.js'
+import { ok, err, isErr } from '../../../../shared/result/Result.js'
 import type { Result } from '../../../../shared/result/Result.js'
 import type { AppError } from '../../../../shared/errors/AppError.js'
 import { ValidationError, UnauthorizedError } from '../../../../shared/errors/AppError.js'
@@ -21,7 +21,7 @@ export class ValidateTotpUseCase {
     const { mfaRepository, totpService, keyEncryptionService, logger } = this.deps
 
     const mfaResult = await mfaRepository.getMfaData(userId)
-    if (mfaResult.isErr()) return err(mfaResult.error)
+    if (isErr(mfaResult)) return err(mfaResult.error)
     const mfaData = mfaResult.value
 
     if (!mfaData.mfaEnabled || !mfaData.totpSecret) {
@@ -34,7 +34,7 @@ export class ValidateTotpUseCase {
     }
 
     const decryptResult = await keyEncryptionService.decrypt(ciphertext, iv)
-    if (decryptResult.isErr()) return err(decryptResult.error)
+    if (isErr(decryptResult)) return err(decryptResult.error)
 
     console.log('validating code:', code, 'against secret length:', decryptResult.value.length)
     const valid = await totpService.verify(code, decryptResult.value)

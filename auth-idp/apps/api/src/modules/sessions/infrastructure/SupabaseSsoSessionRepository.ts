@@ -1,15 +1,17 @@
-import { eq, and, gt } from 'drizzle-orm'
+import { eq, and, gt, sql } from 'drizzle-orm'
 import { ok, err } from '../../../shared/result/Result.js'
 import type { Result } from '../../../shared/result/Result.js'
 import { DatabaseError, NotFoundError } from '../../../shared/errors/AppError.js'
 import type { DrizzleClient } from '../../../infrastructure/database/postgres.client.js'
-import { ssoSessions } from '../../../database/index.js'
+import { ssoSessions } from './sessions.schema.js'
 import { SsoSession } from '../domain/SsoSession.js'
 import type { ParticipatingApp } from '../domain/SsoSession.js'
 import type {
   ISsoSessionRepository,
   CreateSsoSessionInput,
 } from '../application/ports/ISsoSessionRepository.js'
+
+type SessionRow = typeof ssoSessions.$inferSelect
 
 interface Deps {
   db: DrizzleClient
@@ -25,18 +27,21 @@ export class SupabaseSsoSessionRepository implements ISsoSessionRepository {
   async create(input: CreateSsoSessionInput): Promise<Result<SsoSession, DatabaseError>> {
     try {
       const expiresAt = new Date(Date.now() + (input.expiresInSeconds ?? 86400) * 1000)
-      const row = await this.db
+      const rows = await this.db
         .insert(ssoSessions)
         .values({
-          userId: input.userId,
-          sessionToken: input.idpSessionToken,
-          participatingAppIds: [],
+          organizationId:      input.organizationId ?? '',   // placeholder until M19
+          userId:              input.userId,
+          status:              'active',
+          ipAddress:           input.ipAddress ?? null,
+          userAgent:           input.userAgent ?? null,
+          amr:                 sql`'{}'::text[]`,
+          participatingAppIds: sql`'{}'::text[]`,
           expiresAt,
         })
         .returning()
-        .then(rows => rows[0]!)
 
-      return ok(this.toDomain(row))
+      return ok(this.toDomain(rows[0]!))
     } catch (e) {
       return err(new DatabaseError('Failed to create SSO session', e))
     }
@@ -44,13 +49,13 @@ export class SupabaseSsoSessionRepository implements ISsoSessionRepository {
 
   async findById(id: string): Promise<Result<SsoSession, NotFoundError | DatabaseError>> {
     try {
-      const row = await this.db
+      const rows = await this.db
         .select()
         .from(ssoSessions)
         .where(eq(ssoSessions.id, id))
         .limit(1)
-        .then(rows => rows[0])
 
+      const row = rows[0]
       if (!row) return err(new NotFoundError(`SSO session not found: ${id}`))
       return ok(this.toDomain(row))
     } catch (e) {
@@ -58,20 +63,10 @@ export class SupabaseSsoSessionRepository implements ISsoSessionRepository {
     }
   }
 
-  async findByToken(token: string): Promise<Result<SsoSession, NotFoundError | DatabaseError>> {
-    try {
-      const row = await this.db
-        .select()
-        .from(ssoSessions)
-        .where(eq(ssoSessions.sessionToken, token))
-        .limit(1)
-        .then(rows => rows[0])
-
-      if (!row) return err(new NotFoundError('SSO session not found for token'))
-      return ok(this.toDomain(row))
-    } catch (e) {
-      return err(new DatabaseError('Failed to find SSO session by token', e))
-    }
+  async findByToken(_token: string): Promise<Result<SsoSession, NotFoundError | DatabaseError>> {
+    // sessionToken was removed from the new schema — sessions are looked up by id
+    // This is a no-op placeholder until M19 restructures session lookup
+    return err(new NotFoundError('findByToken not supported in new schema — use findById'))
   }
 
   async findActiveByUserId(userId: string): Promise<Result<SsoSession[], DatabaseError>> {
@@ -90,20 +85,19 @@ export class SupabaseSsoSessionRepository implements ISsoSessionRepository {
 
       return ok(rows.map(r => this.toDomain(r)))
     } catch (e) {
-      console.error('findActiveByUserId raw error:', e)
       return err(new DatabaseError('Failed to find active SSO sessions', e))
     }
   }
 
   async addParticipatingApp(sessionId: string, app: ParticipatingApp): Promise<Result<void, DatabaseError>> {
     try {
-      const session = await this.db
+      const rows = await this.db
         .select({ ids: ssoSessions.participatingAppIds })
         .from(ssoSessions)
         .where(eq(ssoSessions.id, sessionId))
         .limit(1)
-        .then(rows => rows[0])
 
+      const session = rows[0]
       if (!session) return err(new DatabaseError('Session not found when adding app'))
 
       const current = session.ids ?? []
@@ -111,7 +105,7 @@ export class SupabaseSsoSessionRepository implements ISsoSessionRepository {
 
       await this.db
         .update(ssoSessions)
-        .set({ participatingAppIds: [...current, app.appId] })
+        .set({ participatingAppIds: sql`${JSON.stringify([...current, app.appId])}::text[]` })
         .where(eq(ssoSessions.id, sessionId))
 
       return ok(undefined)
@@ -124,7 +118,7 @@ export class SupabaseSsoSessionRepository implements ISsoSessionRepository {
     try {
       await this.db
         .update(ssoSessions)
-        .set({ status: 'revoked' })
+        .set({ status: 'revoked', revokedAt: new Date() })
         .where(eq(ssoSessions.id, sessionId))
       return ok(undefined)
     } catch (e) {
@@ -136,7 +130,7 @@ export class SupabaseSsoSessionRepository implements ISsoSessionRepository {
     try {
       await this.db
         .update(ssoSessions)
-        .set({ status: 'revoked' })
+        .set({ status: 'revoked', revokedAt: new Date() })
         .where(
           and(
             eq(ssoSessions.userId, userId),
@@ -145,15 +139,12 @@ export class SupabaseSsoSessionRepository implements ISsoSessionRepository {
         )
       return ok(undefined)
     } catch (e) {
-      console.error('revokeAllForUser raw error:', e)
       return err(new DatabaseError('Failed to revoke all SSO sessions for user', e))
     }
   }
 
-  private toDomain(row: typeof ssoSessions.$inferSelect): SsoSession {
-    // participatingAppIds is a flat string[] in the schema — wrap as ParticipatingApp[]
-    // protocol is unknown from a flat ID list; default to 'saml' for SLO fanout
-    const participatingApps: ParticipatingApp[] = (row.participatingAppIds ?? []).map(appId => ({
+  private toDomain(row: SessionRow): SsoSession {
+    const participatingApps: ParticipatingApp[] = (row.participatingAppIds ?? []).map((appId: string) => ({
       appId,
       protocol: 'saml' as const,
     }))
@@ -161,11 +152,11 @@ export class SupabaseSsoSessionRepository implements ISsoSessionRepository {
     return new SsoSession(
       row.id,
       row.userId,
-      row.sessionToken,
+      row.id,              // sessionToken removed — use id as token until M19
       participatingApps,
       row.createdAt,
       row.expiresAt,
-      row.status === 'revoked' ? row.lastActiveAt : null,
+      row.revokedAt ?? null,
     )
   }
 }

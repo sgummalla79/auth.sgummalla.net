@@ -4,7 +4,6 @@ import {
   uuid,
   text,
   boolean,
-  integer,
   timestamp,
   index,
   uniqueIndex,

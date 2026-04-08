@@ -66,10 +66,14 @@ export class RotateSigningKeyUseCase {
     if (isErr(retireResult)) return err(retireResult.error)
 
     const saveResult = await this.repo.save({
-      kid, algorithm, use: 'sig', status: 'active',
-      publicKeyPem: keyPairResult.value.publicKeyPem,
+      kid,
+      organizationId:      '',           // ← ADD placeholder
+      algorithm,
+      status:              'active',
+      publicKeyPem:        keyPairResult.value.publicKeyPem,
+      publicKeyJwk:        '',
       encryptedPrivateKey: encryptResult.value.ciphertext,
-      encryptionIv: encryptResult.value.iv,
+      encryptionIv:        encryptResult.value.iv,
       expiresAt,
     })
     if (isErr(saveResult)) return err(saveResult.error)

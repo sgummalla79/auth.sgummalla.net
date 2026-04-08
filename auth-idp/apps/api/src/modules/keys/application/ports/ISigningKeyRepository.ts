@@ -1,6 +1,6 @@
 import type { Result } from '../../../../shared/result/Result.js'
 import type { DatabaseError, NotFoundError } from '../../../../shared/errors/AppError.js'
-import type { KeyStatus } from '../../../../database/index.js'
+import type { KeyStatus } from '../../../../shared/types/domain-types.js'
 import type { SigningKey } from '../../domain/SigningKey.js'
 
 export interface ISigningKeyRepository {

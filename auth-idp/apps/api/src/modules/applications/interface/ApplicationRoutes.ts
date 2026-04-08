@@ -3,7 +3,7 @@ import { isAppError, UnauthorizedError } from '../../../shared/errors/AppError.j
 import type { RegisterApplicationUseCase } from '../application/use-cases/RegisterApplication.js'
 import type { GetApplicationUseCase, ListApplicationsUseCase, UpdateApplicationUseCase } from '../application/use-cases/ApplicationQueries.js'
 import type { Env } from '../../../shared/config/env.js'
-import { isOk, isErr } from '../../../shared/result/Result.js'
+import { isErr } from '../../../shared/result/Result.js'
 
 interface Deps {
   registerApplicationUseCase: RegisterApplicationUseCase

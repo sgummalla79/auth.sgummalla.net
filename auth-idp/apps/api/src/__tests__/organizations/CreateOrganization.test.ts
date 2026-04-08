@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, assert } from 'vitest'
 import { CreateOrganizationUseCase } from '../../modules/organizations/application/use-cases/CreateOrganization.js'
-import { ok, err } from '../../shared/result/Result.js'
+import { ok, err, isErr, isOk } from '../../shared/result/Result.js'
 import { ConflictError, NotFoundError, InternalError } from '../../shared/errors/AppError.js'
 import pino from 'pino'
 
@@ -46,7 +46,7 @@ describe('CreateOrganizationUseCase', () => {
       name: 'Acme Corp',
       creatingUserId: '00000000-0000-0000-0000-000000000001',
     })
-    expect(result.isOk()).toBe(true)
+    expect(isOk(result)).toBe(true)
     expect(mockOrgRepo.save).toHaveBeenCalledOnce()
     expect(mockKeyGen.generateKeyPair).toHaveBeenCalledWith('RS256')
     expect(mockKeyRepo.save).toHaveBeenCalledOnce()
@@ -60,7 +60,7 @@ describe('CreateOrganizationUseCase', () => {
       name: 'Acme Corp',
       creatingUserId: '00000000-0000-0000-0000-000000000001',
     })
-    assert(result.isErr())
+    assert(isErr(result))
     expect(result.error).toBeInstanceOf(ConflictError)
   })
 
@@ -69,7 +69,7 @@ describe('CreateOrganizationUseCase', () => {
       name: 'Acme Corp',
       creatingUserId: 'not-a-uuid',
     })
-    expect(result.isErr()).toBe(true)
+    expect(isErr(result)).toBe(true)
   })
 
   it('fails gracefully if key generation fails', async () => {
@@ -78,6 +78,6 @@ describe('CreateOrganizationUseCase', () => {
       name: 'Acme Corp',
       creatingUserId: '00000000-0000-0000-0000-000000000001',
     })
-    expect(result.isErr()).toBe(true)
+    expect(isErr(result)).toBe(true)
   })
 })

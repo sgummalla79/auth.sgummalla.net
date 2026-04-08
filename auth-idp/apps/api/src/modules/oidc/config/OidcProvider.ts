@@ -10,6 +10,7 @@ import type { IKeyEncryptionService } from '../../keys/application/ports/IKeyEnc
 import type { Logger } from '../../../shared/logger/logger.js'
 import { OidcAdapter, initOidcAdapter } from '../adapter/RedisOidcAdapter.js'
 import { OidcAccountAdapter } from '../adapter/OidcAccountAdapter.js'
+import { isErr } from '../../../shared/result/Result.js'
 
 export async function buildOidcProvider(deps: {
   config: Env
@@ -126,10 +127,12 @@ export async function buildOidcProvider(deps: {
         stack: error.stack,
       }, 'OIDC provider error')
       ctx.type = 'application/json'
-      ctx.body = { 
-        code: 'OIDC_ERROR', 
+      ctx.body = {
+        code:    'OIDC_ERROR',
         message: error.message,
-        detail: error.cause?.message ?? error.error_detail
+        detail:  error.cause instanceof Error
+                  ? error.cause.message
+                  : (error as any).error_detail,
       }
     },
   }
@@ -143,7 +146,7 @@ async function buildJwks(
   logger: Logger,
 ): Promise<{ keys: object[] }> {
   const keysResult = await signingKeyRepository.findPublicKeys()
-  if (keysResult.isErr() || keysResult.value.length === 0) {
+  if (isErr(keysResult) || keysResult.value.length === 0) {
     logger.warn('No signing keys found for OIDC provider')
     return { keys: [] }
   }
@@ -158,7 +161,7 @@ async function buildJwks(
       key.encryptedPrivateKey,
       key.encryptionIv,
     )
-    if (decryptResult.isErr()) {
+    if (isErr(decryptResult)) {
       logger.error({ kid: key.kid }, 'Failed to decrypt signing key')
       continue
     }

@@ -1,4 +1,4 @@
-import type { UserStatus } from '../../../database/index.js'
+import type { UserStatus } from '../../../shared/types/domain-types.js'
 
 export class User {
   constructor(
@@ -21,10 +21,11 @@ export class User {
     return new Date() < this.lockedUntil
   }
 
-  isPendingVerification(): boolean { return this.status === 'pending_verification' }
+  isPendingVerification(): boolean {
+    return false  // removed in new schema — always false until M16 adds email verification flow
+  }
 
   canLogin(): boolean {
-    return (this.status === 'active' || this.status === 'pending_verification')
-      && !this.isLocked()
+    return this.status === 'active' && !this.isLocked()
   }
 }

@@ -1,5 +1,5 @@
 import { eq, and } from 'drizzle-orm'
-import { ok, err, fromPromise, isErr, isOk } from '../../../shared/result/Result.js'
+import { ok, err, fromPromise, isErr } from '../../../shared/result/Result.js'
 import type { Result } from '../../../shared/result/Result.js'
 import { NotFoundError, InternalError } from '../../../shared/errors/AppError.js'
 import type { AppError } from '../../../shared/errors/AppError.js'

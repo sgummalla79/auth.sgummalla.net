@@ -1,4 +1,4 @@
-import { ok, err } from '../../../../shared/result/Result.js'
+import { ok, err, isErr} from '../../../../shared/result/Result.js'
 import type { Result } from '../../../../shared/result/Result.js'
 import type { AppError } from '../../../../shared/errors/AppError.js'
 import type { Logger } from '../../../../shared/logger/logger.js'
@@ -28,7 +28,7 @@ export class CreateSsoSessionUseCase {
       expiresInSeconds: cmd.expiresInSeconds ?? 86400, // 24 hours default
     })
 
-    if (result.isErr()) return err(result.error)
+    if (isErr(result)) return err(result.error)
 
     logger.info({ userId: cmd.userId, sessionId: result.value.id }, 'SSO session created')
     return ok(result.value)

@@ -3,6 +3,7 @@ import type { MongoAuditRepository } from '../infrastructure/MongoAuditRepositor
 import type { Logger } from '../../../shared/logger/logger.js'
 import type { LogAuditEventInput } from '../application/ports/IAuditLogger.js'
 import type { Env } from '../../../shared/config/env.js'
+import { isErr } from '../../../shared/result/Result.js'
 
 const QUEUE_NAME = 'audit-events'
 
@@ -22,19 +23,20 @@ export class AuditWorker {
     this.worker = new Worker(
       QUEUE_NAME,
       async (job) => {
-        const data = job.data as LogAuditEventInput & { occurredAt: string }
+        const data = job.data as LogAuditEventInput & { occurredAt: string; organizationId?: string }
         const result = await auditRepository.save({
-          type: data.type,
-          outcome: data.outcome,
-          userId: data.userId ?? null,
-          appId: data.appId ?? null,
-          traceId: data.traceId ?? null,
-          ipAddress: data.ipAddress ?? null,
-          userAgent: data.userAgent ?? null,
-          metadata: data.metadata ?? {},
-          occurredAt: new Date(data.occurredAt),
+          type:           data.type,
+          outcome:        data.outcome,
+          organizationId: data.organizationId ?? '',   // ← ADD
+          userId:         data.userId ?? null,
+          appId:          data.appId ?? null,
+          traceId:        data.traceId ?? null,
+          ipAddress:      data.ipAddress ?? null,
+          userAgent:      data.userAgent ?? null,
+          metadata:       data.metadata ?? {},
+          occurredAt:     new Date(data.occurredAt),
         })
-        if (result.isErr()) {
+        if (isErr(result)) {
           this.logger.error({ err: result.error, jobId: job.id }, 'Failed to persist audit event')
           throw result.error
         }

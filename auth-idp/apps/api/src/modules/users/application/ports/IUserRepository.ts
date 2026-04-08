@@ -1,7 +1,7 @@
 import type { Result } from '../../../../shared/result/Result.js'
 import type { DatabaseError, NotFoundError, ConflictError } from '../../../../shared/errors/AppError.js'
-import type { User } from '../domain/User.js'
-import type { UserProfile } from '../domain/UserProfile.js'
+import type { User } from '../../domain/User.js'
+import type { UserProfile } from '../../domain/UserProfile.js'
 
 export interface IUserRepository {
   save(input: CreateUserInput): Promise<Result<User, DatabaseError | ConflictError>>
@@ -17,7 +17,7 @@ export interface IUserRepository {
   verifyEmail(userId: string): Promise<Result<void, DatabaseError>>
 }
 
-export interface CreateUserInput { email: string; passwordHash: string }
+export interface CreateUserInput { organizationId?: string; email: string; passwordHash: string }
 export interface CreateProfileInput {
   userId: string; givenName?: string; familyName?: string; displayName?: string
 }

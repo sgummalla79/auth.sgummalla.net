@@ -66,7 +66,7 @@ describe('OidcAccountAdapter', () => {
     expect(account).toBeDefined()
     expect(account!.accountId).toBe('user-123')
 
-    const claims = await account!.claims('userinfo', 'openid email profile')
+    const claims = await account!.claims('userinfo', 'openid email profile', {}, [])
     expect(claims['sub']).toBe('user-123')
     expect(claims['email']).toBe('alice@example.com')
     expect(claims['given_name']).toBe('Alice')

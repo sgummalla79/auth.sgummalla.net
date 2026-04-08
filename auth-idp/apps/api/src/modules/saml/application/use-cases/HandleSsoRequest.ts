@@ -1,4 +1,4 @@
-import { err, isErr, isOk } from '../../../../shared/result/Result.js'
+import { err, isErr } from '../../../../shared/result/Result.js'
 import type { Result } from '../../../../shared/result/Result.js'
 import type { AppError } from '../../../../shared/errors/AppError.js'
 import { ValidationError } from '../../../../shared/errors/AppError.js'

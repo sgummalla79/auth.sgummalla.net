@@ -2,7 +2,7 @@ import { generateKeyPairSync } from 'crypto'
 import { ok, err } from '../../../shared/result/Result.js'
 import type { Result } from '../../../shared/result/Result.js'
 import { InternalError } from '../../../shared/errors/AppError.js'
-import type { KeyAlgorithm } from '../../../database/index.js'
+import type { KeyAlgorithm } from '../../../shared/types/domain-types.js'
 import type { IKeyGenerationService, KeyPair } from '../application/ports/IKeyGenerationService.js'
 
 export class NodeCryptoKeyGenerationService implements IKeyGenerationService {

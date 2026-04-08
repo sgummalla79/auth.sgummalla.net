@@ -1,5 +1,5 @@
 import { exportJWK, importSPKI } from 'jose'
-import { ok, err } from '../../../../shared/result/Result.js'
+import { ok, err, isErr } from '../../../../shared/result/Result.js'
 import type { Result } from '../../../../shared/result/Result.js'
 import type { AppError } from '../../../../shared/errors/AppError.js'
 import { InternalError } from '../../../../shared/errors/AppError.js'
@@ -30,13 +30,13 @@ export class GetJwksUseCase {
 
   async execute(): Promise<Result<JwksResponse, AppError>> {
     const keysResult = await this.repo.findPublicKeys()
-    if (keysResult.isErr()) return err(keysResult.error)
+    if (isErr(keysResult)) return err(keysResult.error)
 
     const jwkKeys: JwkKey[] = []
 
     for (const key of keysResult.value) {
       const jwkResult = await this.toJwk(key)
-      if (jwkResult.isErr()) {
+      if (isErr(jwkResult)) {
         this.logger.error({ kid: key.kid, err: jwkResult.error }, 'Failed to convert key to JWK')
         continue
       }
@@ -50,7 +50,7 @@ export class GetJwksUseCase {
     try {
       const cryptoKey = await importSPKI(key.publicKeyPem, key.algorithm)
       const jwk = await exportJWK(cryptoKey)
-      return ok({ ...jwk, kid: key.kid, use: key.use, alg: key.algorithm } as JwkKey)
+      return ok({ ...jwk, kid: key.kid, use: 'sig', alg: key.algorithm } as JwkKey)
     } catch (error) {
       return err(new InternalError(`Failed to export JWK for kid ${key.kid}`, error))
     }

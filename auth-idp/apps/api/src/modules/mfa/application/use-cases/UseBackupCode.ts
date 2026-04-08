@@ -1,4 +1,4 @@
-import { ok, err } from '../../../../shared/result/Result.js'
+import { ok, err, isErr} from '../../../../shared/result/Result.js'
 import type { Result } from '../../../../shared/result/Result.js'
 import type { AppError } from '../../../../shared/errors/AppError.js'
 import { ValidationError, UnauthorizedError } from '../../../../shared/errors/AppError.js'
@@ -19,7 +19,7 @@ export class UseBackupCodeUseCase {
     const { mfaRepository, backupCodeService, logger } = this.deps
 
     const mfaResult = await mfaRepository.getMfaData(userId)
-    if (mfaResult.isErr()) return err(mfaResult.error)
+    if (isErr(mfaResult)) return err(mfaResult.error)
     const mfaData = mfaResult.value
 
     if (!mfaData.mfaEnabled) {
@@ -47,7 +47,7 @@ export class UseBackupCodeUseCase {
     // Remove the used code — single use
     const remaining = mfaData.backupCodes.filter((_, i) => i !== matchedIndex)
     const consumeResult = await mfaRepository.consumeBackupCode(userId, remaining)
-    if (consumeResult.isErr()) return err(consumeResult.error)
+    if (isErr(consumeResult)) return err(consumeResult.error)
 
     logger.info({ userId, codesRemaining: remaining.length }, 'Backup code consumed')
     return ok(undefined)

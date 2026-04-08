@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import { z } from 'zod'
-import type { Cradle } from '../../../shared/container/container.js'
+import type { Cradle } from '../../../shared/container/index.js'
+import { isErr } from '../../../shared/result/Result.js'
 
 const JwtAssertionSchema = z.object({
   client_id: z.string().min(1),
@@ -32,7 +33,7 @@ export async function registerJwtAuthRoutes(app: FastifyInstance): Promise<void>
         clientAssertion: parsed.data.client_assertion,
       })
 
-      if (result.isErr()) throw result.error
+      if (isErr(result)) throw result.error
 
       const token = result.value
       return reply.status(200).send({
@@ -71,7 +72,7 @@ export async function registerJwtAuthRoutes(app: FastifyInstance): Promise<void>
         certVerified: effectiveCertVerified,
       })
 
-      if (result.isErr()) throw result.error
+      if (isErr(result)) throw result.error
 
       const token = result.value
       return reply.status(200).send({

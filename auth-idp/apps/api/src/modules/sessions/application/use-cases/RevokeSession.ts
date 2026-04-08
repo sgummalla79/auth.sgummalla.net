@@ -1,4 +1,4 @@
-import { ok, err } from '../../../../shared/result/Result.js'
+import { ok, err, isErr } from '../../../../shared/result/Result.js'
 import type { Result } from '../../../../shared/result/Result.js'
 import type { AppError } from '../../../../shared/errors/AppError.js'
 import { UnauthorizedError } from '../../../../shared/errors/AppError.js'
@@ -24,7 +24,7 @@ export class RevokeSessionUseCase {
     const { ssoSessionRepository, sloFanoutService, logger } = this.deps
 
     const sessionResult = await ssoSessionRepository.findById(cmd.sessionId)
-    if (sessionResult.isErr()) return err(sessionResult.error)
+    if (isErr(sessionResult)) return err(sessionResult.error)
     const session = sessionResult.value
 
     // Verify ownership
@@ -34,7 +34,7 @@ export class RevokeSessionUseCase {
 
     // Revoke in DB
     const revokeResult = await ssoSessionRepository.revoke(cmd.sessionId)
-    if (revokeResult.isErr()) return err(revokeResult.error)
+    if (isErr(revokeResult)) return err(revokeResult.error)
 
     // Fan out SLO to participating apps (best-effort)
     if (session.participatingApps.length > 0) {

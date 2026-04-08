@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import type { Cradle } from '../../../shared/container/index.js'
-import { isOk, isErr } from '../../../shared/result/Result.js'
+import { isErr } from '../../../shared/result/Result.js'
 
 async function requireSession(
   request: FastifyRequest,

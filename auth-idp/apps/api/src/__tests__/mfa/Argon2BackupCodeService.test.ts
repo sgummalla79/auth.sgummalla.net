@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { Argon2BackupCodeService } from '../../modules/mfa/infrastructure/Argon2BackupCodeService.js'
+import { isOk, isErr } from '../../shared/result/Result.js'
 
 describe('Argon2BackupCodeService', () => {
   const service = new Argon2BackupCodeService()
@@ -25,8 +26,8 @@ describe('Argon2BackupCodeService', () => {
   it('hashes and verifies a code correctly', async () => {
     const code = 'ABCD-1234-EF56'
     const hashResult = await service.hash(code)
-    expect(hashResult.isOk()).toBe(true)
-    if (hashResult.isOk()) {
+    expect(isOk(hashResult)).toBe(true)
+    if (isOk(hashResult)) {
       const valid = await service.verify(code, hashResult.value)
       expect(valid).toBe(true)
     }
@@ -34,7 +35,9 @@ describe('Argon2BackupCodeService', () => {
 
   it('rejects incorrect code against hash', async () => {
     const hashResult = await service.hash('ABCD-1234-EF56')
-    if (hashResult.isOk()) {
+    if (isErr(hashResult)) {
+      expect(hashResult.error).toBeInstanceOf(Error)
+    } else {
       const valid = await service.verify('XXXX-XXXX-XXXX', hashResult.value)
       expect(valid).toBe(false)
     }
