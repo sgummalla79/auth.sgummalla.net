@@ -1,62 +1,61 @@
 import { randomBytes } from 'crypto'
+import { z } from 'zod'
 import { ok, err, isErr } from '../../../../shared/result/Result.js'
 import type { Result } from '../../../../shared/result/Result.js'
 import type { AppError } from '../../../../shared/errors/AppError.js'
-import { ConflictError } from '../../../../shared/errors/AppError.js'
+import { ValidationError, InternalError } from '../../../../shared/errors/AppError.js'
 import type { Logger } from '../../../../shared/logger/logger.js'
 import type { KeyAlgorithm } from '../../../../shared/types/domain-types.js'
 import type { SigningKey } from '../../domain/SigningKey.js'
 import type { ISigningKeyRepository } from '../ports/ISigningKeyRepository.js'
-import type { IKeyEncryptionService } from '../ports/IKeyEncryptionService.js'
 import type { IKeyGenerationService } from '../ports/IKeyGenerationService.js'
+import type { IKeyEncryptionService } from '../ports/IKeyEncryptionService.js'
 import type { IKeyCache } from '../ports/IKeyCache.js'
 
-export interface GenerateSigningKeyCmd {
-  algorithm?: KeyAlgorithm
-  expiresInDays?: number
-}
+const InputSchema = z.object({
+  organizationId: z.string().uuid(),
+  algorithm:      z.enum(['RS256', 'RS384', 'RS512', 'ES256', 'ES384', 'ES512']).default('RS256'),
+  expiresInDays:  z.number().int().min(1).max(3650).default(365),
+})
 
-interface Deps {
+export type GenerateSigningKeyInput = z.infer<typeof InputSchema>
+
+type Deps = {
   signingKeyRepository: ISigningKeyRepository
-  keyEncryptionService: IKeyEncryptionService
   keyGenerationService: IKeyGenerationService
-  keyCache: IKeyCache
-  logger: Logger
+  keyEncryptionService: IKeyEncryptionService
+  keyCache:             IKeyCache
+  logger:               Logger
 }
 
 export class GenerateSigningKeyUseCase {
-  private readonly repo: ISigningKeyRepository
-  private readonly encryption: IKeyEncryptionService
-  private readonly generation: IKeyGenerationService
-  private readonly cache: IKeyCache
-  private readonly logger: Logger
+  private readonly repo:    ISigningKeyRepository
+  private readonly keygen:  IKeyGenerationService
+  private readonly encrypt: IKeyEncryptionService
+  private readonly cache:   IKeyCache
+  private readonly logger:  Logger
 
-  constructor({ signingKeyRepository, keyEncryptionService, keyGenerationService, keyCache, logger }: Deps) {
-    this.repo = signingKeyRepository
-    this.encryption = keyEncryptionService
-    this.generation = keyGenerationService
-    this.cache = keyCache
-    this.logger = logger
+  constructor(deps: Deps) {
+    this.repo    = deps.signingKeyRepository
+    this.keygen  = deps.keyGenerationService
+    this.encrypt = deps.keyEncryptionService
+    this.cache   = deps.keyCache
+    this.logger  = deps.logger
   }
 
-  async execute(cmd: GenerateSigningKeyCmd = {}): Promise<Result<SigningKey, AppError>> {
-    const algorithm = cmd.algorithm ?? 'RS256'
-    const expiresInDays = cmd.expiresInDays ?? 90
-
-    this.logger.info({ algorithm }, 'Generating signing key')
-
-    const existing = await this.repo.findActiveSigningKey()
-    if (isErr(existing)) {
-      return err(new ConflictError(
-        'An active signing key already exists. Use /rotate to replace it.',
-      ))
+  async execute(input: GenerateSigningKeyInput): Promise<Result<SigningKey, AppError>> {
+    const parsed = InputSchema.safeParse(input)
+    if (!parsed.success) {
+      return err(new ValidationError('Invalid key generation input', parsed.error.flatten().fieldErrors as Record<string, string[]>))
     }
 
-    const keyPairResult = this.generation.generateKeyPair(algorithm)
-    if (isErr(keyPairResult)) return err(keyPairResult.error)
+    const { organizationId, algorithm, expiresInDays } = parsed.data
 
-    const encryptResult = this.encryption.encrypt(keyPairResult.value.privateKeyPem)
-    if (isErr(encryptResult)) return err(encryptResult.error)
+    const keyPairResult = await this.keygen.generateKeyPair(algorithm as KeyAlgorithm)
+    if (isErr(keyPairResult)) return err(new InternalError('Key generation failed'))
+
+    const encryptResult = await this.encrypt.encrypt(keyPairResult.value.privateKeyPem)
+    if (isErr(encryptResult)) return err(new InternalError('Key encryption failed'))
 
     const kid = `key_${randomBytes(8).toString('hex')}`
     const expiresAt = new Date()
@@ -64,18 +63,20 @@ export class GenerateSigningKeyUseCase {
 
     const saveResult = await this.repo.save({
       kid,
-      organizationId:      '',           // ← placeholder until M15
+      organizationId,
       algorithm,
       status:              'active',
       publicKeyPem:        keyPairResult.value.publicKeyPem,
-      publicKeyJwk:        '',           // ← placeholder until M15
+      publicKeyJwk:        '',
       encryptedPrivateKey: encryptResult.value.ciphertext,
       encryptionIv:        encryptResult.value.iv,
       expiresAt,
     })
     if (isErr(saveResult)) return err(saveResult.error)
-    await this.cache.invalidate()      // ← organizationId placeholder
-    this.logger.info({ kid, expiresAt }, 'Signing key generated')
+
+    await this.cache.invalidate(organizationId)
+    this.logger.info({ kid, organizationId, expiresAt }, 'Signing key generated')
+
     return ok(saveResult.value)
   }
 }

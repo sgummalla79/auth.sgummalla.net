@@ -1,58 +1,46 @@
 import { ok, err } from '../../../shared/result/Result.js'
 import type { Result } from '../../../shared/result/Result.js'
-import { CacheError } from '../../../shared/errors/AppError.js'
-import type { Logger } from '../../../shared/logger/logger.js'
+import { InternalError } from '../../../shared/errors/AppError.js'
 import type { Redis } from 'ioredis'
-import type { IKeyCache, CachedKeyRow } from '../application/ports/IKeyCache.js'
+import type { IKeyCache, CachedKey } from '../application/ports/IKeyCache.js'
 
-const CACHE_KEY = 'idp:keys:active:sig'
-const CACHE_TTL = 300
-
-interface Deps { redis: Redis; logger: Logger }
+const TTL_SECONDS = 300 // 5 minutes
 
 export class RedisKeyCache implements IKeyCache {
-  private readonly redis: Redis
-  private readonly logger: Logger
+  constructor(private readonly redis: Redis) {}
 
-  constructor({ redis, logger }: Deps) {
-    this.redis = redis
-    this.logger = logger.child({ cache: 'KeyCache' })
+  private cacheKey(organizationId: string): string {
+    return `active-signing-key:${organizationId}`
   }
 
-  async get(): Promise<Result<CachedKeyRow | null, CacheError>> {
+  async get(organizationId: string): Promise<Result<CachedKey | null, InternalError>> {
     try {
-      const raw = await this.redis.get(CACHE_KEY)
+      const raw = await this.redis.get(this.cacheKey(organizationId))
       if (!raw) return ok(null)
-      try {
-        return ok(JSON.parse(raw) as CachedKeyRow)
-      } catch {
-        await this.invalidate()
-        return ok(null)
-      }
+      return ok(JSON.parse(raw) as CachedKey)
     } catch (e) {
-      this.logger.warn({ err: e }, 'Key cache read failed — falling back to DB')
-      return err(new CacheError('Cache read failed', e))
+      return err(new InternalError('Cache read failed', e))
     }
   }
 
-  async set(key: CachedKeyRow): Promise<Result<void, CacheError>> {
+  async set(organizationId: string, key: CachedKey): Promise<void> {
     try {
-      await this.redis.setex(CACHE_KEY, CACHE_TTL, JSON.stringify(key))
-      return ok(undefined)
-    } catch (e) {
-      this.logger.warn({ err: e }, 'Key cache write failed')
-      return ok(undefined) // Non-fatal — don't block the caller
+      await this.redis.set(
+        this.cacheKey(organizationId),
+        JSON.stringify(key),
+        'EX',
+        TTL_SECONDS,
+      )
+    } catch {
+      // Cache write failure is non-fatal — DB is the source of truth
     }
   }
 
-  async invalidate(): Promise<Result<void, CacheError>> {
+  async invalidate(organizationId: string): Promise<void> {
     try {
-      await this.redis.del(CACHE_KEY)
-      this.logger.debug('Key cache invalidated')
-      return ok(undefined)
-    } catch (e) {
-      this.logger.warn({ err: e }, 'Key cache invalidation failed')
-      return ok(undefined) // Non-fatal
+      await this.redis.del(this.cacheKey(organizationId))
+    } catch {
+      // Cache invalidation failure is non-fatal
     }
   }
 }

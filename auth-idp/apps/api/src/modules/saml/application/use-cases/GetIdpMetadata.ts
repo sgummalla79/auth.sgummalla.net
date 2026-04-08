@@ -40,7 +40,7 @@ export class GetIdpMetadataUseCase {
     }
 
     // 2. Active signing key
-    const keyResult = await signingKeyRepository.findActiveSigningKey()
+    const keyResult = await signingKeyRepository.findActiveKey('')
     if (isErr(keyResult)) return err(keyResult.error)
     const signingKey = keyResult.value
 

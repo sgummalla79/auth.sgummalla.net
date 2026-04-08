@@ -74,7 +74,7 @@ export class HttpSloFanoutService implements ISloFanoutService {
       }
       const { samlConfig } = appResult.value
 
-      const keyResult = await signingKeyRepository.findActiveSigningKey()
+      const keyResult = await signingKeyRepository.findActiveKey('')
       if (isErr(keyResult)) throw new Error('No active signing key')
 
       const decryptResult = await keyEncryptionService.decrypt(

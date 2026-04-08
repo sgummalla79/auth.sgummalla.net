@@ -1,16 +1,15 @@
-import type { Result } from '../../../../shared/result/Result.js'
-import type { CacheError } from '../../../../shared/errors/AppError.js'
-
-export interface IKeyCache {
-  get(): Promise<Result<CachedKeyRow | null, CacheError>>
-  set(key: CachedKeyRow): Promise<Result<void, CacheError>>
-  invalidate(): Promise<Result<void, CacheError>>
-}
-
-export interface CachedKeyRow {
+export interface CachedKey {
   kid: string
+  organizationId: string
   algorithm: string
   publicKeyPem: string
+  publicKeyJwk: string
   encryptedPrivateKey: string
   encryptionIv: string
+}
+
+export interface IKeyCache {
+  get(organizationId: string): Promise<any>
+  set(organizationId: string, key: CachedKey): Promise<void>
+  invalidate(organizationId: string): Promise<void>
 }

@@ -96,8 +96,8 @@ export class CreateOrganizationUseCase {
       algorithm:           'RS256',
       status:              'active',
       publicKeyPem:        keyPair.value.publicKeyPem,
-      publicKeyJwk:        '',                              // ← placeholder, M15 will derive this properly
-      encryptedPrivateKey: encrypted.value.ciphertext,      // ← was encryptedData
+      publicKeyJwk:        '',
+      encryptedPrivateKey: encrypted.value.ciphertext,
       encryptionIv:        encrypted.value.iv,
       expiresAt:           null,
     })

@@ -102,10 +102,11 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(fastifyFormBody)
 
   await registerKeyRoutes(app, {
-    getJwksUseCase: container.cradle.getJwksUseCase,
+    getJwksUseCase:            container.cradle.getJwksUseCase,
     generateSigningKeyUseCase: container.cradle.generateSigningKeyUseCase,
-    rotateSigningKeyUseCase: container.cradle.rotateSigningKeyUseCase,
-    config: container.cradle.config,
+    rotateSigningKeyUseCase:   container.cradle.rotateSigningKeyUseCase,
+    config:                    container.cradle.config,
+    container,                 // ← ADD
   })
 
   await registerUserRoutes(app, {

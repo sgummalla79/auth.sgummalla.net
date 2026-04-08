@@ -145,7 +145,7 @@ async function buildJwks(
   keyEncryptionService: IKeyEncryptionService,
   logger: Logger,
 ): Promise<{ keys: object[] }> {
-  const keysResult = await signingKeyRepository.findPublicKeys()
+  const keysResult = await signingKeyRepository.findPublicKeys('')
   if (isErr(keysResult) || keysResult.value.length === 0) {
     logger.warn('No signing keys found for OIDC provider')
     return { keys: [] }

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import { NodeCryptoKeyGenerationService } from '../../modules/keys/infrastructure/NodeCryptoKeyGenerationService.js'
 import { isOk } from '../../shared/result/Result.js'
+import { isErr } from '../../shared/result/Result.js'
 
 describe('NodeCryptoKeyGenerationService', () => {
   let service: NodeCryptoKeyGenerationService
@@ -26,7 +27,6 @@ describe('NodeCryptoKeyGenerationService', () => {
   })
 
   it('errors on unsupported algorithm', () => {
-    // @ts-expect-error intentional
-    expect(service.generateKeyPair('HS256').isErr()).toBe(true)
+    expect(isErr(service.generateKeyPair('HS256' as any))).toBe(true)
   })
 })

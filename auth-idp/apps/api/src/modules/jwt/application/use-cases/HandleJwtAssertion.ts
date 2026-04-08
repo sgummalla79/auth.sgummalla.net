@@ -62,7 +62,7 @@ export class HandleJwtAssertionUseCase {
     )
     if (isErr(verifyResult)) return err(verifyResult.error)
 
-    const keyResult = await signingKeyRepository.findActiveSigningKey()
+    const keyResult = await signingKeyRepository.findActiveKey('')
     if (isErr(keyResult)) return err(keyResult.error)
     const signingKey = keyResult.value
 

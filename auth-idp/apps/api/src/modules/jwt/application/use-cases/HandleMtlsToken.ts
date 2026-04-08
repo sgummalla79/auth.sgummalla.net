@@ -51,7 +51,7 @@ export class HandleMtlsTokenUseCase {
       return err(new UnauthorizedError('Application is inactive'))
     }
 
-    const keyResult = await signingKeyRepository.findActiveSigningKey()
+    const keyResult = await signingKeyRepository.findActiveKey('')
     if (isErr(keyResult)) return err(keyResult.error)
     const signingKey = keyResult.value
 
